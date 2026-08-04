@@ -1,0 +1,1243 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Console de Estudo — Recuperação de Banco de Dados I</title>
+<style>
+  :root{
+    --bg:#eaeef5; --surface:#ffffff; --surface-2:#f5f7fb;
+    --ink:#151a28; --muted:#5b6377; --line:#d7dde9;
+    --primary:#3a39a0; --primary-ink:#ffffff;
+    --key:#d99022;            /* destaque PK/chave */
+    --ok:#157f54; --ok-bg:#e4f4ec;
+    --bad:#c23a31; --bad-bg:#fbe7e5;
+    --code-bg:#1c2233; --code-ink:#e8edf8; --code-key:#f0b75e; --code-str:#8fd6a8;
+    --font-display:Georgia,"Times New Roman",serif;
+    --font-sans:system-ui,-apple-system,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
+    --font-mono:ui-monospace,"SF Mono",Menlo,Consolas,"Liberation Mono",monospace;
+    --radius:12px; --shadow:0 1px 2px rgba(20,26,40,.06),0 8px 24px rgba(20,26,40,.06);
+  }
+  *{box-sizing:border-box}
+  html{scroll-behavior:smooth}
+  body{margin:0;background:var(--bg);color:var(--ink);font-family:var(--font-sans);line-height:1.55;-webkit-font-smoothing:antialiased}
+
+  /* ---------- Header ---------- */
+  header{position:sticky;top:0;z-index:50;background:rgba(234,238,245,.86);backdrop-filter:blur(8px);border-bottom:1px solid var(--line)}
+  .head-inner{max-width:980px;margin:0 auto;padding:14px 20px}
+  .brand{display:flex;align-items:baseline;gap:10px;flex-wrap:wrap}
+  .brand .tag{font-family:var(--font-mono);font-size:11px;letter-spacing:.14em;text-transform:uppercase;color:var(--key);background:#fff5e3;border:1px solid #f0dcb4;padding:2px 8px;border-radius:999px}
+  .brand h1{font-family:var(--font-display);font-weight:700;font-size:20px;margin:0;letter-spacing:-.01em}
+  .brand .sub{color:var(--muted);font-size:13px}
+  .meter{margin-top:12px;display:flex;gap:10px;flex-wrap:wrap;align-items:center}
+  .chip{font-size:12.5px;background:var(--surface);border:1px solid var(--line);border-radius:999px;padding:5px 11px;display:flex;gap:7px;align-items:center}
+  .chip b{font-family:var(--font-mono)}
+  .chip .dot{width:8px;height:8px;border-radius:50%}
+  .bar{flex:1;min-width:160px;height:9px;background:#dfe5f0;border-radius:999px;overflow:hidden;border:1px solid var(--line)}
+  .bar > i{display:block;height:100%;width:0;background:linear-gradient(90deg,var(--primary),#6f6ed6);transition:width .4s ease}
+  .reset{margin-left:auto;font-size:12px;color:var(--muted);background:none;border:1px solid var(--line);border-radius:8px;padding:5px 10px;cursor:pointer}
+  .reset:hover{color:var(--ink);border-color:#bcc5d6}
+
+  /* ---------- Nav ---------- */
+  nav{max-width:980px;margin:0 auto;padding:10px 20px 0;display:flex;gap:6px;flex-wrap:wrap}
+  .tab{font-size:13.5px;font-weight:600;color:var(--muted);background:none;border:1px solid transparent;border-radius:9px 9px 0 0;padding:9px 13px;cursor:pointer}
+  .tab:hover{color:var(--ink)}
+  .tab[aria-selected="true"]{color:var(--primary);background:var(--surface);border-color:var(--line);border-bottom-color:var(--surface);position:relative;top:1px}
+
+  /* ---------- Layout ---------- */
+  main{max-width:980px;margin:0 auto;padding:24px 20px 80px}
+  section[role="tabpanel"]{display:none;animation:fade .35s ease}
+  section[role="tabpanel"].active{display:block}
+  @keyframes fade{from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:none}}
+  .intro{font-family:var(--font-display);font-size:26px;line-height:1.25;margin:0 0 6px;letter-spacing:-.02em}
+  .lead{color:var(--muted);max-width:62ch;margin:0 0 22px}
+  .eyebrow{font-family:var(--font-mono);font-size:11.5px;letter-spacing:.16em;text-transform:uppercase;color:var(--key);margin:0 0 4px}
+
+  /* ---------- Cards ---------- */
+  .card{background:var(--surface);border:1px solid var(--line);border-left:4px solid var(--primary);border-radius:var(--radius);padding:18px 20px;margin:0 0 16px;box-shadow:var(--shadow)}
+  .card .qnum{font-family:var(--font-mono);font-size:12px;color:var(--muted);letter-spacing:.05em}
+  .card .qtext{font-weight:600;margin:4px 0 14px}
+  .card .qtext code,.exp code,.modelans code,.tbl-cap code{font-family:var(--font-mono);background:var(--surface-2);border:1px solid var(--line);padding:1px 5px;border-radius:5px;font-size:.9em}
+
+  pre.sql{background:var(--code-bg);color:var(--code-ink);font-family:var(--font-mono);font-size:13px;line-height:1.6;padding:14px 16px;border-radius:10px;overflow-x:auto;margin:10px 0;white-space:pre}
+  pre.sql .k{color:var(--code-key);font-weight:600}
+  pre.sql .s{color:var(--code-str)}
+  pre.sql .c{color:#8893ab;font-style:italic}
+
+  /* mini data tables in prompts */
+  .minitbl{display:inline-block;vertical-align:top;margin:6px 14px 6px 0;border:1px solid var(--line);border-radius:8px;overflow:hidden;font-family:var(--font-mono);font-size:12.5px}
+  .minitbl .h{background:var(--surface-2);padding:5px 10px;font-weight:700;border-bottom:1px solid var(--line)}
+  .minitbl table{border-collapse:collapse}
+  .minitbl td{border-top:1px solid #eceff5;padding:3px 10px}
+  .minitbl td+td{border-left:1px solid #eceff5}
+
+  /* ---------- Objective options ---------- */
+  .opts{display:flex;flex-direction:column;gap:8px}
+  .opt{display:flex;gap:10px;align-items:flex-start;border:1px solid var(--line);border-radius:9px;padding:10px 12px;cursor:pointer;transition:border-color .15s,background .15s}
+  .opt:hover{border-color:#b9c2d6;background:var(--surface-2)}
+  .opt input{margin-top:3px;accent-color:var(--primary)}
+  .opt .lbl{font-weight:600;font-family:var(--font-mono);color:var(--muted)}
+  .opt.correct{border-color:var(--ok);background:var(--ok-bg)}
+  .opt.wrong{border-color:var(--bad);background:var(--bad-bg)}
+  .opt.disabled{cursor:default;pointer-events:none;opacity:.92}
+
+  /* ---------- Buttons ---------- */
+  .btn{font:inherit;font-weight:600;font-size:13.5px;border-radius:9px;padding:9px 16px;cursor:pointer;border:1px solid transparent}
+  .btn-primary{background:var(--primary);color:#fff}
+  .btn-primary:hover{background:#322f8c}
+  .btn-ghost{background:var(--surface);color:var(--ink);border-color:var(--line)}
+  .btn-ghost:hover{border-color:#b9c2d6}
+  .btn:disabled{opacity:.5;cursor:default}
+  .row{display:flex;gap:10px;flex-wrap:wrap;align-items:center;margin-top:14px}
+
+  textarea{width:100%;min-height:120px;resize:vertical;font-family:var(--font-mono);font-size:13.5px;line-height:1.55;color:var(--code-ink);background:var(--code-bg);border:1px solid #2c3450;border-radius:10px;padding:12px 14px}
+  textarea:focus{outline:2px solid var(--primary);outline-offset:1px}
+  textarea.theory{font-family:var(--font-sans);color:var(--ink);background:var(--surface-2);border-color:var(--line);font-size:14px}
+
+  /* ---------- Feedback ---------- */
+  .fb{margin-top:14px;border-radius:10px;padding:13px 15px;font-size:14px;display:none}
+  .fb.show{display:block}
+  .fb.good{background:var(--ok-bg);border:1px solid #b6e0c8}
+  .fb.bad{background:var(--bad-bg);border:1px solid #f1c4bf}
+  .fb h4{margin:0 0 6px;font-size:14px}
+  .crit{list-style:none;margin:8px 0 0;padding:0;display:flex;flex-direction:column;gap:5px}
+  .crit li{display:flex;gap:8px;align-items:flex-start;font-size:13.5px}
+  .crit .mk{font-family:var(--font-mono);font-weight:700}
+  .crit .pass{color:var(--ok)} .crit .fail{color:var(--bad)}
+  .scoreline{font-weight:700;margin:2px 0 0;font-family:var(--font-mono)}
+
+  .modelans{margin-top:12px;background:var(--surface-2);border:1px dashed var(--line);border-radius:10px;padding:12px 15px;font-size:14px;display:none}
+  .modelans.show{display:block}
+  .modelans h4{margin:0 0 8px;font-size:13px;font-family:var(--font-mono);letter-spacing:.06em;text-transform:uppercase;color:var(--key)}
+  .selfcheck{margin-top:10px}
+  .selfcheck label{display:flex;gap:9px;align-items:flex-start;padding:5px 0;font-size:13.5px;cursor:pointer}
+  .selfcheck input{margin-top:3px;accent-color:var(--ok)}
+
+  .exp{margin-top:12px;font-size:13.5px;color:var(--ink);background:var(--surface-2);border-radius:8px;padding:11px 13px;display:none}
+  .exp.show{display:block}
+  .exp b{color:var(--primary)}
+
+  /* ---------- Modeling builder ---------- */
+  .build{background:var(--surface);border:1px solid var(--line);border-radius:10px;overflow:hidden;margin:12px 0}
+  .build .tname{font-family:var(--font-mono);font-weight:700;background:var(--surface-2);padding:8px 12px;border-bottom:1px solid var(--line);display:flex;align-items:center;gap:8px}
+  .build table{width:100%;border-collapse:collapse;font-size:13.5px}
+  .build th{text-align:left;font-size:11.5px;letter-spacing:.06em;text-transform:uppercase;color:var(--muted);font-weight:600;padding:7px 12px;border-bottom:1px solid var(--line)}
+  .build td{padding:6px 12px;border-bottom:1px solid #eef1f7;font-family:var(--font-mono)}
+  .build tr:last-child td{border-bottom:none}
+  .build select{font:inherit;font-family:var(--font-sans);font-size:13px;padding:5px 8px;border:1px solid var(--line);border-radius:7px;background:#fff;min-width:170px}
+  .build td.res{font-family:var(--font-sans);font-weight:600}
+  .cell-ok{background:var(--ok-bg)} .cell-bad{background:var(--bad-bg)}
+  .keytag{font-size:10px;font-family:var(--font-mono);background:#fff5e3;color:var(--key);border:1px solid #f0dcb4;border-radius:5px;padding:1px 5px}
+
+  .yn{display:flex;gap:18px;margin:8px 0 4px}
+  .yn label{display:flex;gap:7px;align-items:center;font-size:14px;cursor:pointer}
+
+  details.hint{margin-top:10px;font-size:13.5px}
+  details.hint summary{cursor:pointer;color:var(--primary);font-weight:600}
+  details.hint p{color:var(--muted);margin:8px 0 0}
+
+  /* ---------- Cola ---------- */
+  .cola .card{border-left-color:var(--key)}
+  .cola h3{font-family:var(--font-display);margin:0 0 8px}
+  .cola ul{margin:0;padding-left:18px}
+  .cola li{margin:6px 0}
+  .cola kbd{font-family:var(--font-mono);background:var(--code-bg);color:var(--code-key);border-radius:5px;padding:1px 6px;font-size:.86em}
+
+  .done-pill{font-size:11px;font-family:var(--font-mono);background:var(--ok-bg);color:var(--ok);border:1px solid #b6e0c8;border-radius:999px;padding:2px 9px;margin-left:auto}
+
+  /* difficulty + filters + autocomplete */
+  .diff{font-size:11px;font-family:var(--font-mono);border-radius:999px;padding:2px 9px;font-weight:700;letter-spacing:.03em}
+  .diff.facil{background:var(--ok-bg);color:var(--ok);border:1px solid #b6e0c8}
+  .diff.media{background:#fff5e3;color:var(--key);border:1px solid #f0dcb4}
+  .diff.dificil{background:var(--bad-bg);color:var(--bad);border:1px solid #f1c4bf}
+  .filters{display:flex;gap:8px;flex-wrap:wrap;margin:0 0 18px;align-items:center}
+  .filt{font:inherit;font-size:13px;font-weight:600;border:1px solid var(--line);background:var(--surface);border-radius:999px;padding:6px 13px;cursor:pointer;color:var(--muted)}
+  .filt[aria-pressed="true"]{background:var(--primary);color:#fff;border-color:var(--primary)}
+  .ac-btn{display:none}
+  body.ac-on .ac-btn{display:inline-block}
+  .ac-toggle{margin-left:auto;font:inherit;font-size:13px;font-weight:600;border:1px solid var(--key);color:var(--key);background:#fff8ec;border-radius:999px;padding:6px 13px;cursor:pointer}
+  .ac-toggle.on{background:var(--key);color:#fff;border-color:var(--key)}
+  .ex .card{border-left-color:#7a5cd0}
+  .ex .steps{margin:8px 0;padding-left:20px;font-size:13.5px}
+  .ex .steps li{margin:4px 0}
+  .ex .tip{font-size:12.5px;color:var(--muted);font-style:italic;margin-top:4px}
+  footer{max-width:980px;margin:0 auto;padding:0 20px 40px;color:var(--muted);font-size:12.5px;text-align:center}
+  @media (max-width:560px){.minitbl{margin-right:8px}.brand h1{font-size:18px}}
+  @media (prefers-reduced-motion:reduce){*{animation:none!important;transition:none!important}}
+</style>
+</head>
+<body>
+
+<header>
+  <div class="head-inner">
+    <div class="brand">
+      <span class="tag">recuperação · BD I</span>
+      <h1>Console de Estudo</h1>
+      <span class="sub">Modelagem · SQL · correção automática</span>
+    </div>
+    <div class="meter">
+      <span class="chip"><span class="dot" style="background:var(--primary)"></span>Objetivas <b id="m-obj">0/22</b></span>
+      <span class="chip"><span class="dot" style="background:var(--key)"></span>Discursivas <b id="m-dis">0/52</b></span>
+      <span class="chip"><span class="dot" style="background:var(--ok)"></span>Modelagem <b id="m-mod">0/3</b></span>
+      <span class="chip"><span class="dot" style="background:#7a5cd0"></span>Avançado <b id="m-adv">0/22</b></span>
+      <div class="bar" title="progresso geral"><i id="m-fill"></i></div>
+      <button class="reset" id="resetBtn">reiniciar</button>
+    </div>
+  </div>
+  <nav id="tabs" role="tablist">
+    <button class="tab" role="tab" aria-selected="true" data-target="home">Início</button>
+    <button class="tab" role="tab" aria-selected="false" data-target="obj">Objetivas</button>
+    <button class="tab" role="tab" aria-selected="false" data-target="teoria">Discursivas · Teoria</button>
+    <button class="tab" role="tab" aria-selected="false" data-target="sql">Discursivas · SQL</button>
+    <button class="tab" role="tab" aria-selected="false" data-target="ex">Exemplos</button>
+    <button class="tab" role="tab" aria-selected="false" data-target="mod">Modelagem</button>
+    <button class="tab" role="tab" aria-selected="false" data-target="avancado">Avançado · 11–13</button>
+    <button class="tab" role="tab" aria-selected="false" data-target="cola">Cola Rápida</button>
+  </nav>
+</header>
+
+<main>
+  <!-- HOME -->
+  <section id="home" role="tabpanel" class="active">
+    <p class="eyebrow">para a prova de amanhã</p>
+    <h2 class="intro">Treine cada tipo de questão que caiu — e veja sua correção na hora.</h2>
+    <p class="lead">A prova é só discursiva, mas aqui você treina dos dois jeitos. As <b>objetivas</b> fixam a teoria rápido; as <b>discursivas de SQL</b> são corrigidas por critérios (SELECT, JOIN, ON, WHERE…); na <b>modelagem</b> você marca PK e FK nas tabelas e o sistema aponta o que errou. Faça à mão primeiro, depois confira.</p>
+    <div class="card" style="border-left-color:var(--key)">
+      <p class="qnum">como estudar hoje</p>
+      <ol style="margin:6px 0 0;padding-left:20px">
+        <li><b>Objetivas</b> (~20 min): passa rápido pra acordar a teoria.</li>
+        <li><b>Discursivas de Teoria</b>: escreva de verdade, depois marque os pontos que acertou.</li>
+        <li><b>Discursivas de SQL</b>: escreva a query e clique <b>Corrigir</b> — o sistema valida os pedaços.</li>
+        <li><b>Modelagem</b>: o auto-relacionamento (supervisão) caiu hoje. Treine os 3.</li>
+        <li>Termine na <b>Cola Rápida</b> e releia antes de dormir.</li>
+      </ol>
+    </div>
+    <p class="lead" style="margin-top:6px">Dica de ouro da prova: mesmo sem terminar a query, escreva certo o <code style="font-family:var(--font-mono)">SELECT</code>, o <code style="font-family:var(--font-mono)">FROM</code> e os <code style="font-family:var(--font-mono)">JOIN … ON</code> (ligando pelas chaves). Isso costuma garantir pontuação parcial.</p>
+  </section>
+
+  <!-- OBJETIVAS -->
+  <section id="obj" role="tabpanel">
+    <p class="eyebrow">bloco 1</p>
+    <h2 class="intro">22 questões objetivas</h2>
+    <p class="lead">Escolha e clique para ver na hora se acertou, com a explicação.</p>
+    <div id="objList"></div>
+  </section>
+
+  <!-- TEORIA -->
+  <section id="teoria" role="tabpanel">
+    <p class="eyebrow">bloco 2 · discursivas</p>
+    <h2 class="intro">12 discursivas de teoria</h2>
+    <p class="lead">Responda com suas palavras. Em <b>Ver gabarito</b> aparece a resposta-modelo e uma lista de pontos-chave: marque os que você cobriu para calcular sua nota.</p>
+    <div id="teoriaList"></div>
+  </section>
+
+  <!-- SQL -->
+  <section id="sql" role="tabpanel">
+    <p class="eyebrow">bloco 3 · discursivas</p>
+    <h2 class="intro">40 discursivas de SQL — com correção automática</h2>
+    <p class="lead">Divididas em <b>Fáceis</b>, <b>Médias</b> e <b>Difíceis</b>. Escreva a query e clique <b>Corrigir</b> — o sistema checa cada parte (não precisa ser idêntica ao gabarito). Travou? Liga o <b>autocomplete</b> e aparece um botão pra preencher a resposta e estudar a estrutura.</p>
+    <details class="hint" style="margin-bottom:16px"><summary>Esquemas usados aqui</summary>
+      <p style="font-family:var(--font-mono);font-size:12.5px;white-space:pre-wrap">Loja Online:
+clientes(id_cliente, nome, cidade, data_cadastro)
+produtos(id_produto, nome_produto, categoria, preco, estoque)
+pedidos(id_pedido, id_cliente→clientes, data_pedido, status)
+itens_pedido(id_pedido→pedidos, id_produto→produtos, quantidade, preco_unitario)
+
+Locadora:
+MOTORISTA(IDMOTO, NOME, TELEFONE, IDADE)
+RESERVAS(IDMOTO→MOTORISTA, IDCARRO→CARRO, DIA)
+CARRO(IDCARRO, NOMECARRO, COR)
+
+Faculdade:
+ESTUDANTES(id_estudante, nome)
+DISCIPLINAS(id_disciplina, nome)
+MATRICULAS(id_estudante→ESTUDANTES, id_disciplina→DISCIPLINAS, nota)
+
+RochasTec (a base do professor):
+rocha(cod_rocha, nome_rocha, valor_venda, cod_tipo_rocha→tipo_rocha)
+tipo_rocha(cod_tipo_rocha, nome_tipo_rocha)</p>
+    </details>
+    <div class="filters">
+      <button class="filt" data-dif="todas" aria-pressed="true">Todas (40)</button>
+      <button class="filt" data-dif="facil" aria-pressed="false">Fáceis</button>
+      <button class="filt" data-dif="media" aria-pressed="false">Médias</button>
+      <button class="filt" data-dif="dificil" aria-pressed="false">Difíceis</button>
+      <button class="ac-toggle" id="acToggle">✨ Ativar autocomplete</button>
+    </div>
+    <div id="sqlList"></div>
+  </section>
+
+  <!-- EXEMPLOS -->
+  <section id="ex" role="tabpanel" class="ex">
+    <p class="eyebrow">aprenda fazendo</p>
+    <h2 class="intro">Exemplos resolvidos — um de cada tipo</h2>
+    <p class="lead">Travou numa questão? Aqui está cada tipo de SQL com o <b>raciocínio passo a passo</b> e a query final. Leia, entenda o padrão, depois volte pra praticar nas 40 discursivas.</p>
+    <div id="exList"></div>
+  </section>
+
+  <!-- MODELAGEM -->
+  <section id="mod" role="tabpanel">
+    <p class="eyebrow">bloco 4 · interativo</p>
+    <h2 class="intro">Modelagem: monte o modelo lógico</h2>
+    <p class="lead">Em cada coluna, escolha o tipo (<span class="keytag">Comum</span> <span class="keytag">PK</span> <span class="keytag">FK</span> <span class="keytag">FK+PK</span>). Clique <b>Verificar</b> e as células certas ficam verdes, as erradas vermelhas.</p>
+    <div id="modList"></div>
+  </section>
+
+  <!-- AVANCADO -->
+  <section id="avancado" role="tabpanel">
+    <p class="eyebrow">bloco 5 · aulas 11–13</p>
+    <h2 class="intro">Tópicos avançados</h2>
+    <p class="lead">Direto dos slides do Prof. Botacim: tipos de JOIN que faltavam (<b>CROSS</b> e <b>NATURAL</b>), operador <b>IN</b>, <b>CASE</b>, <b>VIEWS</b>, <b>transações</b> (BEGIN/COMMIT/ROLLBACK), <b>stored procedures/functions</b>, <b>triggers</b> (BEFORE/AFTER), <b>cursor</b>, <b>vacuum</b>, <b>SQL embutida</b> (Java) e <b>ODBC</b>. Se a sua recuperação for só do conteúdo básico, dá pra pular esta aba — mas vale a leitura rápida.</p>
+    <p class="eyebrow" style="margin-top:26px">objetivas</p>
+    <div id="avObjList"></div>
+    <p class="eyebrow" style="margin-top:26px">discursivas conceituais</p>
+    <div id="avTeoList"></div>
+  </section>
+
+  <!-- COLA -->
+  <section id="cola" role="tabpanel" class="cola">
+    <p class="eyebrow">leve na cabeça</p>
+    <h2 class="intro">Cola rápida final</h2>
+    <div class="card">
+      <h3>Contagem de JOIN</h3>
+      <ul>
+        <li><b>Colunas</b> = colunas(A) + colunas(B). Sempre, em qualquer join.</li>
+        <li><b>Linhas casadas</b>: para cada valor da chave, multiplique nº de vezes em A × nº de vezes em B.</li>
+        <li><kbd>INNER</kbd> = só casados · <kbd>LEFT</kbd> = casados + sobra esquerda · <kbd>RIGHT</kbd> = casados + sobra direita · <kbd>FULL OUTER</kbd> = casados + as duas sobras.</li>
+        <li><b>NULL = unknown</b> → nunca casa, vira sobra do próprio lado.</li>
+      </ul>
+    </div>
+    <div class="card">
+      <h3>Esqueleto que resolve quase toda query</h3>
+<pre class="sql"><span class="k">SELECT</span> colunas, FUNCAO(x)
+<span class="k">FROM</span> tabelaA a
+<span class="k">JOIN</span> tabelaB b <span class="k">ON</span> a.fk = b.pk   <span class="c">-- liga pelas CHAVES</span>
+<span class="k">WHERE</span> filtro_de_linha         <span class="c">-- filtra LINHAS</span>
+<span class="k">GROUP BY</span> colunas             <span class="c">-- agrupa</span>
+<span class="k">HAVING</span> FUNCAO(x) > n         <span class="c">-- filtra GRUPOS</span>
+<span class="k">ORDER BY</span> coluna <span class="k">DESC</span>        <span class="c">-- ordena</span>
+<span class="k">LIMIT</span> n;                     <span class="c">-- top N</span></pre>
+      <ul>
+        <li>A ligação vai no <kbd>ON</kbd> (chave = chave) — <b>nunca</b> jogue no WHERE de qualquer jeito.</li>
+        <li>"o maior / mais caro / maior nota" → subconsulta com <kbd>MAX()</kbd>. "mais velho / menor" → <kbd>MIN()</kbd>.</li>
+        <li><kbd>WHERE</kbd> filtra linhas · <kbd>HAVING</kbd> filtra grupos (depois do GROUP BY).</li>
+        <li>"quantos"→<kbd>COUNT</kbd> · "total/soma"→<kbd>SUM</kbd> · "média"→<kbd>AVG</kbd>.</li>
+        <li>Pegadinha: <kbd>NOT IN</kbd> com NULL na subconsulta → retorna 0 linhas.</li>
+        <li>NUNCA esqueça o <kbd>WHERE</kbd> no UPDATE/DELETE.</li>
+      </ul>
+    </div>
+    <div class="card">
+      <h3>Derivação MER → Lógico</h3>
+      <ul>
+        <li>Entidade forte → tabela; chave vira <b>PK</b>.</li>
+        <li><b>1:N</b> → PK do lado "1" vira <b>FK</b> no lado "N".</li>
+        <li><b>N:N</b> → cria <b>tabela associativa</b> nova com as 2 PKs como FKs (juntas = PK); atributos do relacionamento entram nela.</li>
+        <li><b>Auto-relacionamento 1:N</b> (supervisão) → <b>FK na própria tabela</b> apontando pra própria PK. Essa coluna é <b>só FK, nunca PK</b>.</li>
+        <li>Atributo multivalorado → tabela nova com a PK da origem (FK) + o atributo.</li>
+      </ul>
+    </div>
+    <div class="card">
+      <h3>Normalização</h3>
+      <ul>
+        <li><b>1FN</b>: atributos atômicos e monovalorados (sem repetição). Resolve multivalorado.</li>
+        <li><b>2FN</b>: em 1FN e sem dependência parcial (nada depende só de parte da PK composta).</li>
+        <li><b>3FN</b>: em 2FN e sem dependência transitiva (atributo não-chave não determina outro não-chave).</li>
+        <li>São acumulativas. PK simples já está em 2FN.</li>
+      </ul>
+    </div>
+    <div class="card">
+      <h3>Avançado (Aulas 11–13)</h3>
+      <ul>
+        <li><b>CROSS JOIN</b> = produto cartesiano (N×M) = <kbd>FROM T1, T2</kbd> sem WHERE.</li>
+        <li><b>NATURAL JOIN</b> = junta sozinho pelas colunas de mesmo nome/tipo (sem ON).</li>
+        <li><b>VIEW</b> = consulta salva (tabela virtual); apaga com <kbd>DROP VIEW</kbd>.</li>
+        <li><b>Transação</b>: <kbd>BEGIN</kbd> → <kbd>COMMIT</kbd> (confirma) ou <kbd>ROLLBACK</kbd> (desfaz tudo). "Tudo ou nada".</li>
+        <li><b>Procedure/Function</b> você chama; <b>Trigger</b> dispara sozinha num evento (INSERT/UPDATE/DELETE).</li>
+        <li><b>Trigger BEFORE</b> pode cancelar/alterar a tupla; <b>AFTER</b> só vê o que já aconteceu.</li>
+        <li><b>Cursor</b> = lê o resultado aos poucos (evita estourar memória). <b>DECLARE</b> = declara variáveis (PL/pgSQL).</li>
+        <li><b>SQL embutida</b> (Java): Connection, Statement, DriverManager. <b>ODBC</b>: driver <kbd>psqlODBC</kbd>.</li>
+      </ul>
+    </div>
+  </section>
+</main>
+
+<footer>Feito para a sua recuperação de Banco de Dados I. Boa prova. 💪</footer>
+
+<script>
+/* =========================================================
+   ESTADO + PROGRESSO
+   ========================================================= */
+const state = { objDone:new Set(), objRight:0, disDone:new Set(), modDone:new Set(),
+                avObjDone:new Set(), avObjRight:0, avTeoDone:new Set() };
+const TOTAL_OBJ = 22, TOTAL_DIS = 52, TOTAL_MOD = 3;
+
+function updateMeter(){
+  document.getElementById('m-obj').textContent = state.objRight + '/' + TOTAL_OBJ;
+  document.getElementById('m-dis').textContent = state.disDone.size + '/' + TOTAL_DIS;
+  document.getElementById('m-mod').textContent = state.modDone.size + '/' + TOTAL_MOD;
+  const advTotal = (typeof AVOBJ!=='undefined'?AVOBJ.length:0) + (typeof AVTEO!=='undefined'?AVTEO.length:0);
+  const advDone = state.avObjDone.size + state.avTeoDone.size;
+  document.getElementById('m-adv').textContent = advDone + '/' + advTotal;
+  const done = state.objDone.size + state.disDone.size + state.modDone.size + advDone;
+  const total = TOTAL_OBJ + TOTAL_DIS + TOTAL_MOD + advTotal;
+  document.getElementById('m-fill').style.width = (done/total*100) + '%';
+}
+
+/* =========================================================
+   NAV (abas)
+   ========================================================= */
+document.getElementById('tabs').addEventListener('click', e=>{
+  const t = e.target.closest('.tab'); if(!t) return;
+  document.querySelectorAll('.tab').forEach(x=>x.setAttribute('aria-selected','false'));
+  t.setAttribute('aria-selected','true');
+  document.querySelectorAll('section[role="tabpanel"]').forEach(s=>s.classList.remove('active'));
+  document.getElementById(t.dataset.target).classList.add('active');
+  window.scrollTo({top:0,behavior:'smooth'});
+});
+
+/* simple SQL highlighter for prompts */
+function hl(code){
+  const kw = /\b(SELECT|FROM|WHERE|JOIN|INNER|LEFT|RIGHT|FULL|OUTER|ON|GROUP BY|ORDER BY|HAVING|LIMIT|AND|OR|NOT|IN|AS|UPDATE|SET|INSERT|INTO|VALUES|DELETE|CREATE|TABLE|PRIMARY|KEY|FOREIGN|REFERENCES|DEFAULT|NULL|INTEGER|VARCHAR|DATE|SERIAL|INT|CONSTRAINT|MAX|MIN|AVG|SUM|COUNT|DISTINCT|BETWEEN|LIKE|DESC|ASC)\b/g;
+  return code.replace(/&/g,'&amp;').replace(/</g,'&lt;')
+    .replace(/'[^']*'/g, m=>'<span class="s">'+m+'</span>')
+    .replace(/--[^\n]*/g, m=>'<span class="c">'+m+'</span>')
+    .replace(kw, m=>'<span class="k">'+m+'</span>');
+}
+
+/* =========================================================
+   BLOCO 1 — OBJETIVAS
+   ========================================================= */
+const OBJ = [
+ {q:'A sequência "11/09/2001" (uma data completa, interpretada num contexto) é um exemplo de:',
+  o:['Dado','Informação','Conhecimento','Metadado'],a:1,
+  e:'Dado é o valor bruto e isolado (09, 11, 2001). Quando ganha contexto e significado, vira <b>informação</b>. A junção de informações que gera entendimento ("o atentado de 11 de setembro") é conhecimento.'},
+ {q:'Qual das alternativas NÃO é uma vantagem do SGBD sobre o sistema de arquivos tradicional?',
+  o:['Controle de redundância e inconsistência','Segurança por controle de permissões','Aumento da redundância de dados','Restrições de integridade (CHECK, FK)'],a:2,
+  e:'O SGBD justamente <b>elimina/controla a redundância</b>. "Aumentar a redundância" é o oposto de uma vantagem.'},
+ {q:'O nível de abstração que descreve COMO os dados são realmente armazenados é o:',
+  o:['Externo (visão)','Conceitual','Físico','Lógico de rede'],a:2,
+  e:'Externo = visão de cada usuário; Conceitual = quais dados existem e suas relações; <b>Físico</b> = como são armazenados.'},
+ {q:'Trocar o disco HDD por um SSD sem precisar reescrever os programas é um exemplo de:',
+  o:['Independência física','Independência lógica','Integridade referencial','Normalização'],a:0,
+  e:'Mudança no nível físico sem afetar os programas = <b>independência física</b>. A lógica (mudar a estrutura conceitual) é mais difícil de alcançar.'},
+ {q:'O Modelo Entidade-Relacionamento (MER) pertence a qual nível de modelagem?',
+  o:['Físico','Lógico relacional','Conceitual','Lógico em rede'],a:2,
+  e:'O MER é <b>conceitual</b>: representa entidades e relações de forma abstrata, sem tabelas/tipos/armazenamento. Objetivo: capturar os requisitos do mundo real de forma simples.'},
+ {q:'O atributo "Endereço", composto por Rua + Número + Cidade + CEP, é classificado como:',
+  o:['Simples (atômico)','Composto','Multivalorado','Determinante'],a:1,
+  e:'Atributo <b>composto</b> é formado por subpartes. Se fosse indivisível seria simples; se aceitasse vários valores, multivalorado.'},
+ {q:'O atributo "telefones" de um cliente (que pode guardar vários números) é:',
+  o:['Composto','Determinante','Multivalorado','Simples'],a:2,
+  e:'Aceita mais de um valor → <b>multivalorado</b>. No modelo lógico vira uma tabela nova com a PK da origem (FK) + o telefone.'},
+ {q:'Como é formada a chave primária de uma entidade fraca?',
+  o:['Apenas por um atributo próprio gerado automaticamente','Pela PK da entidade proprietária (como FK) + a chave parcial própria','Por qualquer atributo composto','Ela não tem chave primária'],a:1,
+  e:'A entidade fraca não se identifica sozinha; sua PK = <b>PK da proprietária (FK) + chave parcial</b> própria.'},
+ {q:'Um Aluno pode cursar várias Disciplinas e cada Disciplina tem vários Alunos. A cardinalidade é:',
+  o:['1:1','1:N','N:1','N:N'],a:3,
+  e:'Vários de um lado ligam a vários do outro → <b>N:N</b>. No lógico, vira uma tabela associativa.'},
+ {q:'Dizer que a participação de uma entidade no relacionamento é "total" significa que:',
+  o:['A instância pode existir sem participar','Toda instância obrigatoriamente participa do relacionamento','O relacionamento é N:N','A entidade é fraca'],a:1,
+  e:'Participação <b>total</b> ("deve") = toda instância participa. Parcial ("pode") = pode existir sem participar.'},
+ {q:'Na notação de Peter Chen, o LOSANGO representa:',
+  o:['Entidade','Atributo','Relacionamento','Cardinalidade'],a:2,
+  e:'Retângulo = entidade, <b>losango = relacionamento</b>, elipse = atributo, linha = cardinalidade.'},
+ {q:'Em uma especialização DISJUNTA, uma instância da superclasse:',
+  o:['Pertence a no máximo uma subclasse','Pode pertencer a várias subclasses ao mesmo tempo','Não pertence a nenhuma subclasse','Deve pertencer a todas as subclasses'],a:0,
+  e:'Disjunta = <b>no máximo uma</b> subclasse. Sobreposta = pode pertencer a várias. (Isso é diferente de total/parcial, que é a completude.)'},
+ {q:'A 1ª regra de integridade (integridade de entidade) afirma que:',
+  o:['Toda FK deve ser nula','Nenhum valor de chave primária pode ser nulo','Toda tabela deve ter uma FK','Chaves estrangeiras não podem se repetir'],a:1,
+  e:'Integridade de entidade: a <b>PK nunca é nula</b> (é sempre obrigatória e única).'},
+ {q:'Pela integridade referencial, o valor de uma chave estrangeira (FK) pode ser:',
+  o:['Apenas um valor que não existe na tabela referenciada','Nulo OU igual a um valor existente da PK referenciada','Sempre nulo','Qualquer número, sem restrição'],a:1,
+  e:'A FK só pode ser <b>nula</b> ou <b>igual a um valor existente</b> da PK referenciada — não pode "apontar para o nada".'},
+ {q:'Para uma tabela estar na 1ª Forma Normal (1FN), é necessário que:',
+  o:['Não tenha dependência transitiva','Os atributos sejam atômicos e monovalorados','Não tenha dependência parcial','Tenha PK composta'],a:1,
+  e:'<b>1FN</b> = atributos atômicos e monovalorados (sem grupos de repetição). Ela resolve o atributo multivalorado.'},
+ {q:'A 2ª Forma Normal (2FN) resolve qual problema?',
+  o:['Atributo multivalorado','Dependência parcial (atributo que depende só de parte de uma PK composta)','Dependência transitiva','Redundância de chave estrangeira'],a:1,
+  e:'<b>2FN</b> (estando em 1FN) elimina a <b>dependência parcial</b>. Tabela com PK simples já está em 2FN.'},
+ {q:'A 3ª Forma Normal (3FN) resolve qual problema?',
+  o:['Dependência parcial','Atributo multivalorado','Dependência transitiva (não-chave determinando outro não-chave)','Ausência de chave primária'],a:2,
+  e:'<b>3FN</b> (estando em 2FN) elimina a <b>dependência transitiva</b>, ex.: CEP→Cidade→Estado.'},
+ {q:'Uma chave candidata que NÃO foi escolhida como chave primária é chamada de:',
+  o:['Chave estrangeira','Chave parcial','Chave alternativa','Superchave'],a:2,
+  e:'Candidata escolhida = primária; candidata não escolhida = <b>chave alternativa</b>.'},
+ {q:'O INNER JOIN entre duas tabelas retorna:',
+  o:['Todas as linhas das duas tabelas','Apenas as linhas com correspondência nas duas tabelas','Todas da esquerda + correspondências da direita','O produto cartesiano'],a:1,
+  e:'<b>INNER JOIN</b> = só os pares que casam nas duas tabelas. (LEFT/RIGHT/FULL trazem também as "sobras".)'},
+ {q:'A tabela A tem 2 colunas (3 linhas) e a tabela B tem 2 colunas (2 linhas). Quantas COLUNAS terá o resultado de "SELECT * FROM A FULL OUTER JOIN B ..."?',
+  o:['2 colunas','3 colunas','4 colunas','Depende da quantidade de linhas'],a:2,
+  e:'Colunas no JOIN é sempre <b>colunas(A) + colunas(B)</b> = 2 + 2 = <b>4</b>. O número de linhas não afeta a contagem de colunas.'},
+ {q:'Para filtrar grupos DEPOIS de um GROUP BY (ex.: só clientes com mais de 5 pedidos), usa-se:',
+  o:['WHERE','HAVING','ORDER BY','DISTINCT'],a:1,
+  e:'<b>WHERE</b> filtra linhas antes de agrupar; <b>HAVING</b> filtra os grupos depois do GROUP BY (geralmente com função de agregação).'},
+ {q:'Na consulta "SELECT nome FROM clientes WHERE id_cliente NOT IN (SELECT id_cliente FROM pedidos)", se a subconsulta puder retornar NULL, o resultado tende a ser:',
+  o:['Os clientes sem pedido, normalmente','Zero linhas (vazio inesperado)','Todos os clientes','Erro de sintaxe'],a:1,
+  e:'Pegadinha clássica: com um NULL na subconsulta, o <b>NOT IN</b> vira UNKNOWN e a consulta retorna <b>0 linhas</b>. Soluções: filtrar o NULL na subconsulta, ou usar NOT EXISTS / LEFT JOIN … IS NULL.'}
+];
+
+(function renderObj(){
+  const root = document.getElementById('objList');
+  OBJ.forEach((item,i)=>{
+    const card = document.createElement('div'); card.className='card';
+    card.innerHTML = `<p class="qnum">Objetiva ${i+1} de ${OBJ.length}</p>
+      <p class="qtext">${item.q}</p><div class="opts"></div>
+      <div class="exp"></div>`;
+    const opts = card.querySelector('.opts');
+    const letters = ['a','b','c','d','e'];
+    item.o.forEach((opt,j)=>{
+      const lab = document.createElement('label'); lab.className='opt';
+      lab.innerHTML = `<input type="radio" name="obj${i}"><span class="lbl">${letters[j]})</span><span>${opt}</span>`;
+      lab.querySelector('input').addEventListener('change',()=>answerObj(i,j,card));
+      opts.appendChild(lab);
+    });
+    root.appendChild(card);
+  });
+})();
+
+function answerObj(qi,choice,card){
+  if(state.objDone.has(qi)) return;
+  state.objDone.add(qi);
+  const labels = card.querySelectorAll('.opt');
+  const correct = OBJ[qi].a;
+  labels.forEach((l,idx)=>{
+    l.classList.add('disabled');
+    l.querySelector('input').disabled = true;
+    if(idx===correct) l.classList.add('correct');
+    if(idx===choice && choice!==correct) l.classList.add('wrong');
+  });
+  if(choice===correct) state.objRight++;
+  const exp = card.querySelector('.exp');
+  exp.innerHTML = (choice===correct?'✅ <b>Correto.</b> ':'❌ <b>Resposta certa: '+['a','b','c','d','e'][correct]+')</b> ') + OBJ[qi].e;
+  exp.classList.add('show');
+  updateMeter();
+}
+
+/* =========================================================
+   BLOCO 2 — DISCURSIVAS DE TEORIA (gabarito + autoavaliação)
+   ========================================================= */
+const TEO = [
+ {q:'Explique, com um exemplo de cada, a diferença entre dado, informação e conhecimento.',
+  ans:'Dado é o valor bruto, isolado e sem contexto (ex.: 09, 11, 2001). Informação é o dado interpretado dentro de um contexto (ex.: 11/09/2001). Conhecimento é a junção de informações que gera entendimento (ex.: "o atentado de 11 de setembro"). A progressão é Dado → Informação → Conhecimento.',
+  pts:['Definiu DADO como valor bruto/isolado, com exemplo','Definiu INFORMAÇÃO como dado em contexto, com exemplo','Definiu CONHECIMENTO como junção que gera entendimento','Citou a progressão Dado → Informação → Conhecimento']},
+ {q:'Defina SGBD e cite três vantagens de usá-lo em vez de um sistema de arquivos tradicional.',
+  ans:'SGBD é o software que cria, manipula e gerencia o banco de dados, fazendo a ponte entre o usuário e os dados (ex.: PostgreSQL, MySQL, Oracle). Três vantagens: (1) elimina redundância e inconsistência; (2) segurança por controle de permissões; (3) garante restrições de integridade (CHECK, FK). Outras válidas: backup/restore, compartilhamento, independência dados↔aplicação.',
+  pts:['Definiu SGBD como software que gerencia o BD','Citou um exemplo de SGBD','Citou a 1ª vantagem','Citou a 2ª vantagem','Citou a 3ª vantagem']},
+ {q:'Descreva os três níveis de abstração de dados e explique a diferença entre independência física e lógica. Qual é mais difícil de alcançar?',
+  ans:'Externo (visão): mostra só a parte que interessa a cada usuário. Conceitual: descreve quais dados existem e suas relações. Físico: descreve como os dados são armazenados. Independência física = mudar o nível físico (ex.: HDD→SSD) sem reescrever programas. Independência lógica = mudar a estrutura conceitual (ex.: dividir uma tabela) sem reescrever programas. A lógica é mais difícil, pois os programas dependem fortemente da estrutura lógica que acessam.',
+  pts:['Descreveu o nível externo (visão)','Descreveu o nível conceitual','Descreveu o nível físico','Diferenciou independência física × lógica','Apontou que a lógica é mais difícil']},
+ {q:'O MER pertence a qual nível de modelagem (conceitual, lógico ou físico)? Justifique e diga o objetivo desse modelo.',
+  ans:'O MER é um modelo conceitual. Ele representa as entidades e suas relações de forma abstrata, sem se preocupar com tabelas, tipos de dados ou armazenamento (isso seria lógico/físico). Seu objetivo é capturar os requisitos do mundo real de maneira simples e inteligível ao projetista e ao usuário.',
+  pts:['Afirmou que o MER é CONCEITUAL','Justificou (abstrato, sem tabelas/tipos/armazenamento)','Indicou o objetivo: capturar requisitos do mundo real de forma simples']},
+ {q:'Cite e explique os quatro tipos de atributo do MER, com um exemplo de cada.',
+  ans:'Simples (atômico): não divisível (ex.: idade). Composto: formado por subpartes (ex.: Endereço = rua + número + cidade + CEP). Multivalorado: aceita vários valores (ex.: telefones). Determinante (chave): identifica unicamente a entidade (ex.: CPF) e vira a chave primária.',
+  pts:['Simples/atômico com exemplo','Composto com exemplo','Multivalorado com exemplo','Determinante/chave com exemplo']},
+ {q:'O que é uma entidade fraca? Como é formada a sua chave primária?',
+  ans:'Entidade fraca é a que não possui atributo-chave próprio capaz de identificá-la sozinha; ela depende de uma entidade proprietária (forte). Sua chave primária é a combinação da PK da entidade proprietária (que entra como FK) com a sua chave parcial própria.',
+  pts:['Definiu entidade fraca (sem chave própria; depende da proprietária)','Explicou a PK = PK da proprietária (FK) + chave parcial']},
+ {q:'Explique os três tipos de cardinalidade (1:1, 1:N, N:N) e a diferença entre participação total e parcial, com exemplos.',
+  ans:'1:1 — cada instância de A liga-se a no máximo uma de B (ex.: pessoa–CPF). 1:N — uma de A liga-se a várias de B (ex.: departamento–empregados). N:N — várias de A ligam-se a várias de B (ex.: aluno–disciplina). Participação total (obrigatória, "deve"): toda instância participa (ex.: todo pedido tem cliente). Participação parcial (opcional, "pode"): a instância pode existir sem participar (ex.: nem todo cliente tem pedido).',
+  pts:['Explicou 1:1 com exemplo','Explicou 1:N com exemplo','Explicou N:N com exemplo','Diferenciou participação total × parcial com exemplo']},
+ {q:'Explique generalização e especialização. Diferencie as restrições de disjunção (disjunta × sobreposta) e de completude (total × parcial).',
+  ans:'Especialização: criar subclasses (subtipos) a partir de uma entidade (ex.: EMPREGADO → Engenheiro, Técnico). Generalização: o inverso — agrupar entidades em uma superclasse. Disjunção: disjunta = uma instância pertence a no máximo uma subclasse; sobreposta = pode pertencer a mais de uma. Completude: total = toda instância da superclasse está em alguma subclasse; parcial = pode não estar em nenhuma.',
+  pts:['Definiu especialização','Definiu generalização (inverso)','Diferenciou disjunta × sobreposta','Diferenciou total × parcial']},
+ {q:'Enuncie e explique as duas regras de integridade (de entidade e referencial).',
+  ans:'Integridade de entidade: nenhum valor de chave primária pode ser nulo (a PK é sempre obrigatória e única). Integridade referencial: o valor de uma chave estrangeira só pode ser nulo OU igual a um valor existente da chave primária referenciada (não pode apontar para o nada).',
+  pts:['Enunciou a integridade de entidade (PK não nula)','Enunciou a integridade referencial (FK nula ou valor existente)']},
+ {q:'Explique as três formas normais (1FN, 2FN e 3FN) e o problema que cada uma resolve.',
+  ans:'1FN: todos os atributos atômicos e monovalorados (sem grupos de repetição) — resolve atributo multivalorado. 2FN: está em 1FN e sem dependência parcial (nada depende só de parte de uma PK composta) — resolve dependência parcial. 3FN: está em 2FN e sem dependência transitiva (nenhum atributo não-chave determina outro não-chave) — resolve dependência transitiva. São acumulativas.',
+  pts:['1FN: atômico/monovalorado (resolve multivalorado)','2FN: sem dependência parcial','3FN: sem dependência transitiva','Mencionou que são acumulativas']},
+ {q:'Diferencie chave primária, chave candidata, chave alternativa e chave estrangeira.',
+  ans:'Chave primária: identifica unicamente a linha; não nula e não repetida. Chave candidata: qualquer atributo (ou conjunto) que poderia ser PK. Chave alternativa: a candidata que não foi escolhida como primária. Chave estrangeira: atributo que referencia a PK de outra (ou da mesma) tabela, garantindo o relacionamento.',
+  pts:['Definiu chave primária','Definiu chave candidata','Definiu chave alternativa','Definiu chave estrangeira']},
+ {q:'Explique a diferença entre WHERE e HAVING e dê um exemplo de cada (pode usar o esquema da Loja Online).',
+  ans:'WHERE filtra linhas individuais antes do agrupamento; HAVING filtra grupos depois do GROUP BY (geralmente com função de agregação). Ex.: WHERE preco > 100 (filtra produtos caros) · GROUP BY categoria HAVING COUNT(*) > 10 (mostra só categorias com mais de 10 produtos). O HAVING só funciona junto com GROUP BY.',
+  pts:['WHERE filtra linhas (antes do agrupamento)','HAVING filtra grupos (depois do GROUP BY)','Deu exemplo de WHERE','Deu exemplo de HAVING']}
+];
+
+(function renderTeo(){
+  const root = document.getElementById('teoriaList');
+  TEO.forEach((item,i)=>{
+    const id = 'teo'+i;
+    const card = document.createElement('div'); card.className='card';
+    card.innerHTML = `<p class="qnum">Teoria ${i+1} de ${TEO.length}</p>
+      <p class="qtext">${item.q}</p>
+      <textarea class="theory" placeholder="Escreva sua resposta aqui antes de ver o gabarito…"></textarea>
+      <div class="row">
+        <button class="btn btn-primary" data-act="gab">Ver gabarito e me autoavaliar</button>
+      </div>
+      <div class="modelans">
+        <h4>Resposta-modelo</h4>
+        <p>${item.ans}</p>
+        <div class="selfcheck"><b style="font-size:13px">Marque o que você cobriu:</b></div>
+        <p class="scoreline" style="margin-top:10px"></p>
+      </div>`;
+    const sc = card.querySelector('.selfcheck');
+    item.pts.forEach((p,j)=>{
+      const lab = document.createElement('label');
+      lab.innerHTML = `<input type="checkbox"><span>${p}</span>`;
+      lab.querySelector('input').addEventListener('change',()=>scoreTeo(i,card));
+      sc.appendChild(lab);
+    });
+    card.querySelector('[data-act="gab"]').addEventListener('click',()=>{
+      card.querySelector('.modelans').classList.add('show');
+      if(!state.disDone.has(id)){ state.disDone.add(id); updateMeter(); }
+      scoreTeo(i,card);
+    });
+    root.appendChild(card);
+  });
+})();
+
+function scoreTeo(i,card){
+  const boxes = card.querySelectorAll('.selfcheck input');
+  let got=0; boxes.forEach(b=>{ if(b.checked) got++; });
+  const total = boxes.length;
+  const line = card.querySelector('.scoreline');
+  const pct = Math.round(got/total*100);
+  line.textContent = `Sua autoavaliação: ${got}/${total} pontos-chave (${pct}%).` +
+    (pct>=70?'  ✅ bom domínio':'  ⚠️ revise os pontos que faltaram');
+  line.style.color = pct>=70 ? 'var(--ok)' : 'var(--key)';
+}
+
+/* =========================================================
+   BLOCO 3 — DISCURSIVAS DE SQL (correção automática)
+   ========================================================= */
+function norm(s){ return ' '+s.toLowerCase().replace(/\s+/g,' ').replace(/;/g,' ').trim()+' '; }
+const has = (t,...words)=>words.every(w=>t.includes(w));
+const any = (t,...words)=>words.some(w=>t.includes(w));
+const nsel = t=>(t.match(/select/g)||[]).length;
+
+const SQL40 = [
+ /* ---------------- FÁCEIS (14) ---------------- */
+ {dif:'facil', q:'(Loja) Liste <b>todos os dados</b> da tabela produtos.',
+  ans:`SELECT * FROM produtos;`,
+  crit:[{l:'Usa SELECT * (ou todas as colunas)', f:t=>has(t,'select','*')},{l:'Vem da tabela produtos', f:t=>has(t,'from','produtos')}]},
+ {dif:'facil', q:'(Loja) Liste apenas o <b>nome</b> e o <b>preço</b> de todos os produtos.',
+  ans:`SELECT nome_produto, preco FROM produtos;`,
+  crit:[{l:'Seleciona nome e preço', f:t=>any(t,'nome_produto','nome') && has(t,'preco')},{l:'Da tabela produtos', f:t=>has(t,'from','produtos')}]},
+ {dif:'facil', q:'(Loja) Liste os produtos da categoria <code>\'Eletrônicos\'</code>.',
+  ans:`SELECT * FROM produtos WHERE categoria = 'Eletrônicos';`,
+  crit:[{l:'SELECT da tabela produtos', f:t=>has(t,'select','produtos')},{l:'Filtra a categoria com WHERE', f:t=>has(t,'where','categoria') && t.includes("'eletrônicos'")}]},
+ {dif:'facil', q:'(Loja) Liste nome e preço dos produtos com preço <b>entre 50 e 200</b> (use BETWEEN).',
+  ans:`SELECT nome_produto, preco FROM produtos WHERE preco BETWEEN 50 AND 200;`,
+  crit:[{l:'SELECT de produtos com preço', f:t=>has(t,'produtos','preco')},{l:'Usa BETWEEN 50 AND 200', f:t=>has(t,'between','50','200')}]},
+ {dif:'facil', q:'(Loja) Liste o nome dos clientes cujo nome <b>começa com a letra A</b> (use LIKE).',
+  ans:`SELECT nome FROM clientes WHERE nome LIKE 'A%';`,
+  crit:[{l:'SELECT da tabela clientes', f:t=>has(t,'select','clientes')},{l:'Usa LIKE com o padrão A%', f:t=>has(t,'like') && t.includes("'a%'")}]},
+ {dif:'facil', q:'(Loja) Liste o nome de todos os produtos em <b>ordem alfabética</b>.',
+  ans:`SELECT nome_produto FROM produtos ORDER BY nome_produto ASC;`,
+  crit:[{l:'SELECT do nome em produtos', f:t=>has(t,'produtos') && any(t,'nome_produto','nome')},{l:'Ordena com ORDER BY (ASC é o padrão)', f:t=>has(t,'order by')}]},
+ {dif:'facil', q:'(RochasTec) Liste o nome das rochas cujo <b>valor de venda é maior que 1000</b>.',
+  ans:`SELECT nome_rocha FROM rocha WHERE valor_venda > 1000;`,
+  crit:[{l:'SELECT da tabela rocha', f:t=>has(t,'select','rocha')},{l:'Filtra valor_venda > 1000', f:t=>has(t,'where','valor_venda') && t.includes('1000') && t.includes('>')}]},
+ {dif:'facil', q:'(Locadora) Liste o nome e a idade dos motoristas com <b>idade maior ou igual a 18</b>.',
+  ans:`SELECT NOME, IDADE FROM MOTORISTA WHERE IDADE >= 18;`,
+  crit:[{l:'SELECT da tabela motorista', f:t=>has(t,'select','motorista')},{l:'Filtra idade >= 18', f:t=>has(t,'where','idade','18') && t.includes('>')}]},
+ {dif:'facil', q:'(Loja · INSERT) Insira um cliente chamado <code>\'Ana Lima\'</code>, da cidade <code>\'Vitória\'</code>, com data de cadastro <code>\'2026-06-22\'</code>.',
+  ans:`INSERT INTO clientes (nome, cidade, data_cadastro)
+VALUES ('Ana Lima', 'Vitória', '2026-06-22');`,
+  crit:[{l:'Usa INSERT INTO clientes', f:t=>has(t,'insert into','clientes')},{l:'Tem a cláusula VALUES', f:t=>has(t,'values')},{l:'Inclui os 3 valores pedidos', f:t=>t.includes("'ana lima'") && t.includes("'vitória'") && t.includes('2026-06-22')}]},
+ {dif:'facil', q:'(Loja · UPDATE) Aumente em <b>10%</b> o preço de todos os produtos da categoria <code>\'Eletrônicos\'</code>.',
+  ans:`UPDATE produtos SET preco = preco * 1.10 WHERE categoria = 'Eletrônicos';`,
+  crit:[{l:'UPDATE na tabela produtos', f:t=>has(t,'update','produtos')},{l:'SET preco = preco * 1.1', f:t=>has(t,'set','preco') && any(t,'1.1','1.10')},{l:'Tem o WHERE da categoria (não esqueça!)', f:t=>has(t,'where','categoria')}]},
+ {dif:'facil', q:'(Loja · DELETE) Apague todos os pedidos com <code>status = \'cancelado\'</code>.',
+  ans:`DELETE FROM pedidos WHERE status = 'cancelado';`,
+  crit:[{l:'DELETE FROM pedidos', f:t=>has(t,'delete','pedidos')},{l:'Tem o WHERE do status (não esqueça!)', f:t=>has(t,'where','status') && t.includes("'cancelado'")}]},
+ {dif:'facil', q:'(Loja) Liste as <b>categorias distintas</b> de produtos (sem repetição).',
+  ans:`SELECT DISTINCT categoria FROM produtos;`,
+  crit:[{l:'Usa DISTINCT', f:t=>has(t,'distinct')},{l:'Seleciona categoria de produtos', f:t=>has(t,'categoria','produtos')}]},
+ {dif:'facil', q:'(Loja) Liste o nome dos produtos em <b>letras maiúsculas</b> (use UPPER).',
+  ans:`SELECT UPPER(nome_produto) FROM produtos;`,
+  crit:[{l:'Usa a função UPPER', f:t=>has(t,'upper')},{l:'Sobre o nome do produto em produtos', f:t=>has(t,'produtos') && any(t,'nome_produto','nome')}]},
+ {dif:'facil', q:'(Locadora) Liste o nome dos carros de cor <code>\'Vermelho\'</code>.',
+  ans:`SELECT NOMECARRO FROM CARRO WHERE COR = 'Vermelho';`,
+  crit:[{l:'SELECT da tabela carro', f:t=>has(t,'select','carro')},{l:'Filtra a cor com WHERE', f:t=>has(t,'where','cor') && t.includes("'vermelho'")}]},
+
+ /* ---------------- MÉDIAS (14) ---------------- */
+ {dif:'media', q:'(Loja · JOIN) Liste o <b>nome do cliente</b> e a <b>data de cada pedido</b>.',
+  ans:`SELECT c.nome, p.data_pedido
+FROM pedidos p
+INNER JOIN clientes c ON c.id_cliente = p.id_cliente;`,
+  crit:[{l:'Usa as tabelas clientes e pedidos', f:t=>has(t,'clientes','pedidos')},{l:'Liga as duas por id_cliente (JOIN…ON ou vírgula)', f:t=>has(t,'id_cliente') && any(t,' join ',', ')},{l:'Seleciona nome e a data', f:t=>has(t,'nome') && any(t,'data_pedido','data')}]},
+ {dif:'media', q:'(Locadora · JOIN) Liste o <b>nome do motorista</b> e o <b>dia</b> de cada reserva.',
+  ans:`SELECT M.NOME, R.DIA
+FROM RESERVAS R
+INNER JOIN MOTORISTA M ON M.IDMOTO = R.IDMOTO;`,
+  crit:[{l:'Usa motorista e reservas', f:t=>has(t,'motorista','reservas')},{l:'Liga por IDMOTO', f:t=>has(t,'idmoto')},{l:'Seleciona nome e dia', f:t=>has(t,'nome','dia')}]},
+ {dif:'media', q:'(RochasTec · JOIN) Liste o <b>nome da rocha</b> e o <b>nome do seu tipo</b>.',
+  ans:`SELECT r.nome_rocha, tr.nome_tipo_rocha
+FROM rocha r
+INNER JOIN tipo_rocha tr ON tr.cod_tipo_rocha = r.cod_tipo_rocha;`,
+  crit:[{l:'Usa rocha e tipo_rocha', f:t=>has(t,'rocha','tipo_rocha')},{l:'Liga por cod_tipo_rocha', f:t=>has(t,'cod_tipo_rocha')},{l:'Seleciona nome da rocha e do tipo', f:t=>has(t,'nome_rocha','nome_tipo_rocha')}]},
+ {dif:'media', q:'(Faculdade · JOIN) Liste o <b>nome do estudante</b> e a <b>nota</b> de cada matrícula.',
+  ans:`SELECT e.nome, m.nota
+FROM matriculas m
+INNER JOIN estudantes e ON e.id_estudante = m.id_estudante;`,
+  crit:[{l:'Usa matriculas e estudantes', f:t=>has(t,'matriculas','estudantes')},{l:'Liga por id_estudante', f:t=>has(t,'id_estudante')},{l:'Seleciona nome e nota', f:t=>has(t,'nome','nota')}]},
+ {dif:'media', q:'(Loja · TOP N) Liste os <b>3 produtos mais caros</b> (nome e preço), do mais caro ao mais barato.',
+  ans:`SELECT nome_produto, preco
+FROM produtos
+ORDER BY preco DESC
+LIMIT 3;`,
+  crit:[{l:'SELECT de produtos com preço', f:t=>has(t,'produtos','preco')},{l:'Ordena por preço DESC', f:t=>has(t,'order by','preco','desc')},{l:'Limita a 3 (LIMIT 3)', f:t=>/limit\s*3/.test(t)}]},
+ {dif:'media', q:'(Loja · AVG) Mostre o <b>preço médio</b> de todos os produtos.',
+  ans:`SELECT AVG(preco) FROM produtos;`,
+  crit:[{l:'Usa a função AVG sobre preco', f:t=>has(t,'avg','preco')},{l:'Da tabela produtos', f:t=>has(t,'from','produtos')}]},
+ {dif:'media', q:'(Loja · COUNT) Mostre <b>quantos produtos</b> existem cadastrados.',
+  ans:`SELECT COUNT(*) FROM produtos;`,
+  crit:[{l:'Usa a função COUNT', f:t=>has(t,'count')},{l:'Da tabela produtos', f:t=>has(t,'from','produtos')}]},
+ {dif:'media', q:'(Loja · GROUP BY) Mostre o <b>preço médio por categoria</b>.',
+  ans:`SELECT categoria, AVG(preco)
+FROM produtos
+GROUP BY categoria;`,
+  crit:[{l:'Seleciona categoria e AVG(preco)', f:t=>has(t,'categoria','avg','preco')},{l:'Agrupa com GROUP BY categoria', f:t=>has(t,'group by','categoria')}]},
+ {dif:'media', q:'(Loja · GROUP BY) Mostre <b>quantos produtos há em cada categoria</b>.',
+  ans:`SELECT categoria, COUNT(*)
+FROM produtos
+GROUP BY categoria;`,
+  crit:[{l:'Seleciona categoria e COUNT', f:t=>has(t,'categoria','count')},{l:'Agrupa por categoria', f:t=>has(t,'group by','categoria')}]},
+ {dif:'media', q:'(Faculdade · GROUP BY) Mostre a <b>média de notas por disciplina</b> (id_disciplina e média).',
+  ans:`SELECT id_disciplina, AVG(nota)
+FROM matriculas
+GROUP BY id_disciplina;`,
+  crit:[{l:'Usa AVG(nota)', f:t=>has(t,'avg','nota')},{l:'Agrupa por id_disciplina', f:t=>has(t,'group by','id_disciplina')}]},
+ {dif:'media', q:'(Loja · ORDER+GROUP) Mostre a <b>categoria</b> e o <b>preço médio</b>, da maior média para a menor.',
+  ans:`SELECT categoria, AVG(preco) AS media
+FROM produtos
+GROUP BY categoria
+ORDER BY media DESC;`,
+  crit:[{l:'AVG(preco) agrupado por categoria', f:t=>has(t,'avg','preco','group by','categoria')},{l:'Ordena de forma decrescente (DESC)', f:t=>has(t,'order by','desc')}]},
+ {dif:'media', q:'(Locadora · JOIN 3) Liste o <b>nome do motorista</b> e o <b>nome do carro</b> de cada reserva.',
+  ans:`SELECT M.NOME, C.NOMECARRO
+FROM RESERVAS R
+INNER JOIN MOTORISTA M ON M.IDMOTO = R.IDMOTO
+INNER JOIN CARRO C ON C.IDCARRO = R.IDCARRO;`,
+  crit:[{l:'Usa as 3 tabelas (motorista, reservas, carro)', f:t=>has(t,'motorista','reservas','carro')},{l:'Liga por IDMOTO e IDCARRO', f:t=>has(t,'idmoto','idcarro')},{l:'Seleciona nome do motorista e do carro', f:t=>has(t,'nome','nomecarro')}]},
+ {dif:'media', q:'(RochasTec · JOIN+GROUP) Mostre o <b>valor médio de venda por tipo de rocha</b> (nome do tipo e média).',
+  ans:`SELECT tr.nome_tipo_rocha, AVG(r.valor_venda)
+FROM rocha r
+INNER JOIN tipo_rocha tr ON tr.cod_tipo_rocha = r.cod_tipo_rocha
+GROUP BY tr.nome_tipo_rocha;`,
+  crit:[{l:'Junta rocha e tipo_rocha por cod_tipo_rocha', f:t=>has(t,'rocha','tipo_rocha','cod_tipo_rocha')},{l:'Usa AVG(valor_venda)', f:t=>has(t,'avg','valor_venda')},{l:'Agrupa por tipo de rocha', f:t=>has(t,'group by')}]},
+ {dif:'media', q:'(Loja) Liste o nome dos produtos com <b>estoque igual a zero</b> (esgotados).',
+  ans:`SELECT nome_produto FROM produtos WHERE estoque = 0;`,
+  crit:[{l:'SELECT de produtos', f:t=>has(t,'select','produtos')},{l:'Filtra estoque = 0', f:t=>has(t,'where','estoque','0')}]},
+
+ /* ---------------- DIFÍCEIS (12) ---------------- */
+ {dif:'dificil', q:'(Locadora · JOIN 3 + filtro) Liste o <b>nome dos motoristas</b> que reservaram um carro de cor <code>\'Verde\'</code>.',
+  ans:`SELECT M.NOME
+FROM MOTORISTA M
+INNER JOIN RESERVAS R ON M.IDMOTO = R.IDMOTO
+INNER JOIN CARRO C ON C.IDCARRO = R.IDCARRO
+WHERE C.COR = 'Verde';`,
+  crit:[{l:'Usa as 3 tabelas', f:t=>has(t,'motorista','reservas','carro')},{l:'Liga por IDMOTO e IDCARRO', f:t=>has(t,'idmoto','idcarro')},{l:'Filtra a cor verde no WHERE', f:t=>has(t,'where','cor') && t.includes("'verde'")}]},
+ {dif:'dificil', q:'(Faculdade · subconsulta) Liste o <b>nome do(s) estudante(s)</b> com a <b>maior nota</b> na disciplina cujo id é 10.',
+  ans:`SELECT e.nome
+FROM matriculas m
+INNER JOIN estudantes e ON e.id_estudante = m.id_estudante
+WHERE m.id_disciplina = 10
+  AND m.nota = (SELECT MAX(nota) FROM matriculas WHERE id_disciplina = 10);`,
+  crit:[{l:'Junta matriculas e estudantes (traz o NOME)', f:t=>has(t,'matriculas','estudantes','nome')},{l:'Usa MAX(nota) numa subconsulta', f:t=>has(t,'max','nota') && nsel(t)>=2},{l:'Filtra a disciplina 10', f:t=>has(t,'id_disciplina') && t.includes('10')}]},
+ {dif:'dificil', q:'(Loja · subconsulta) Liste nome e preço dos produtos cujo <b>preço é maior que a média</b> de todos os produtos.',
+  ans:`SELECT nome_produto, preco
+FROM produtos
+WHERE preco > (SELECT AVG(preco) FROM produtos);`,
+  crit:[{l:'SELECT de produtos com preço', f:t=>has(t,'produtos','preco')},{l:'Subconsulta com AVG(preco)', f:t=>has(t,'avg','preco') && nsel(t)>=2},{l:'Compara preco > (subconsulta)', f:t=>/preco\s*>\s*\(/.test(t)}]},
+ {dif:'dificil', q:'(Loja · SUM/JOIN) Liste o <b>nome do cliente</b> e o <b>total gasto</b> por ele (soma de quantidade × preço unitário), do que mais gastou ao que menos gastou.',
+  ans:`SELECT c.nome, SUM(i.quantidade * i.preco_unitario) AS total
+FROM clientes c
+INNER JOIN pedidos p ON p.id_cliente = c.id_cliente
+INNER JOIN itens_pedido i ON i.id_pedido = p.id_pedido
+GROUP BY c.nome
+ORDER BY total DESC;`,
+  crit:[{l:'Junta clientes, pedidos e itens_pedido', f:t=>has(t,'clientes','pedidos','itens_pedido')},{l:'Soma quantidade × preco_unitario (SUM)', f:t=>has(t,'sum','quantidade','preco_unitario')},{l:'Agrupa por cliente e ordena DESC', f:t=>has(t,'group by') && has(t,'order by','desc')}]},
+ {dif:'dificil', q:'(Loja · LEFT JOIN) Liste o nome dos clientes que <b>nunca fizeram nenhum pedido</b>.',
+  ans:`SELECT c.nome
+FROM clientes c
+LEFT JOIN pedidos p ON p.id_cliente = c.id_cliente
+WHERE p.id_pedido IS NULL;`,
+  crit:[{l:'Usa LEFT JOIN entre clientes e pedidos', f:t=>has(t,'left join','clientes','pedidos')},{l:'Liga por id_cliente', f:t=>has(t,'id_cliente')},{l:'Filtra o lado vazio com IS NULL', f:t=>has(t,'is null')}]},
+ {dif:'dificil', q:'(Loja · HAVING) Liste o nome do cliente e a <b>quantidade de pedidos</b>, apenas para clientes com <b>mais de 5 pedidos</b>.',
+  ans:`SELECT c.nome, COUNT(*) AS qtd
+FROM pedidos p
+INNER JOIN clientes c ON c.id_cliente = p.id_cliente
+GROUP BY c.nome
+HAVING COUNT(*) > 5;`,
+  crit:[{l:'Junta clientes e pedidos', f:t=>has(t,'clientes','pedidos','id_cliente')},{l:'Conta com COUNT e agrupa (GROUP BY)', f:t=>has(t,'count','group by')},{l:'Filtra grupos com HAVING … > 5', f:t=>has(t,'having') && t.includes('5')}]},
+ {dif:'dificil', q:'(Loja · NOT IN) Liste o nome dos produtos que <b>nunca foram vendidos</b> (não aparecem em itens_pedido).',
+  ans:`SELECT nome_produto
+FROM produtos
+WHERE id_produto NOT IN (SELECT id_produto FROM itens_pedido);`,
+  crit:[{l:'SELECT de produtos', f:t=>has(t,'select','produtos')},{l:'Usa NOT IN com subconsulta', f:t=>has(t,'not in') && nsel(t)>=2},{l:'A subconsulta busca id_produto em itens_pedido', f:t=>has(t,'id_produto','itens_pedido')}]},
+ {dif:'dificil', q:'(Loja · JOIN 4) Liste o <b>nome do cliente</b>, o <b>nome do produto</b> e a <b>quantidade</b> de cada item de pedido.',
+  ans:`SELECT c.nome, pr.nome_produto, i.quantidade
+FROM itens_pedido i
+INNER JOIN pedidos p ON p.id_pedido = i.id_pedido
+INNER JOIN clientes c ON c.id_cliente = p.id_cliente
+INNER JOIN produtos pr ON pr.id_produto = i.id_produto;`,
+  crit:[{l:'Usa as 4 tabelas', f:t=>has(t,'itens_pedido','pedidos','clientes','produtos')},{l:'Liga por id_pedido, id_cliente e id_produto', f:t=>has(t,'id_pedido','id_cliente','id_produto')},{l:'Seleciona nome, nome_produto e quantidade', f:t=>has(t,'nome','nome_produto','quantidade')}]},
+ {dif:'dificil', q:'(Faculdade · JOIN) Liste o <b>nome dos estudantes</b> matriculados na disciplina <code>\'Redes\'</code>.',
+  ans:`SELECT e.nome
+FROM matriculas m
+INNER JOIN estudantes e ON e.id_estudante = m.id_estudante
+INNER JOIN disciplinas d ON d.id_disciplina = m.id_disciplina
+WHERE d.nome = 'Redes';`,
+  crit:[{l:'Usa matriculas, estudantes e disciplinas', f:t=>has(t,'matriculas','estudantes','disciplinas')},{l:'Liga pelas chaves id_estudante e id_disciplina', f:t=>has(t,'id_estudante','id_disciplina')},{l:'Filtra a disciplina Redes', f:t=>t.includes("'redes'")}]},
+ {dif:'dificil', q:'(RochasTec · JOIN) Liste o <b>nome das rochas</b> que são do tipo <code>\'Arenito\'</code>.',
+  ans:`SELECT r.nome_rocha
+FROM rocha r
+INNER JOIN tipo_rocha tr ON tr.cod_tipo_rocha = r.cod_tipo_rocha
+WHERE tr.nome_tipo_rocha = 'Arenito';`,
+  crit:[{l:'Junta rocha e tipo_rocha', f:t=>has(t,'rocha','tipo_rocha')},{l:'Liga por cod_tipo_rocha', f:t=>has(t,'cod_tipo_rocha')},{l:'Filtra o tipo Arenito', f:t=>t.includes("'arenito'")}]},
+ {dif:'dificil', q:'(Loja · HAVING) Liste as <b>categorias com mais de 10 produtos</b> (categoria e a contagem).',
+  ans:`SELECT categoria, COUNT(*) AS qtd
+FROM produtos
+GROUP BY categoria
+HAVING COUNT(*) > 10;`,
+  crit:[{l:'Conta produtos por categoria (COUNT + GROUP BY)', f:t=>has(t,'count','group by','categoria')},{l:'Filtra grupos com HAVING … > 10', f:t=>has(t,'having') && t.includes('10')}]},
+ {dif:'dificil', q:'(Loja · DDL) Escreva o <code>CREATE TABLE pedidos</code> com: PK em id_pedido; FK de id_cliente para clientes; data_pedido não nula; status com padrão <code>\'aberto\'</code>. Nomeie as constraints.',
+  ans:`CREATE TABLE pedidos (
+  id_pedido   INTEGER NOT NULL,
+  id_cliente  INTEGER NOT NULL,
+  data_pedido DATE NOT NULL,
+  status      VARCHAR(20) DEFAULT 'aberto',
+  CONSTRAINT pk_pedidos PRIMARY KEY (id_pedido),
+  CONSTRAINT fk_pedidos_cliente FOREIGN KEY (id_cliente) REFERENCES clientes(id_cliente)
+);`,
+  crit:[{l:'CREATE TABLE pedidos', f:t=>has(t,'create table','pedidos')},{l:'PRIMARY KEY em id_pedido', f:t=>has(t,'primary key','id_pedido')},{l:'FOREIGN KEY de id_cliente referenciando clientes', f:t=>has(t,'foreign key','references','clientes')},{l:'data_pedido NOT NULL e status DEFAULT \'aberto\'', f:t=>has(t,'data_pedido','not null','default') && t.includes("'aberto'")}]}
+];
+
+(function renderSql(){
+  const root=document.getElementById('sqlList');
+  const difLabel={facil:'Fácil',media:'Média',dificil:'Difícil'};
+  SQL40.forEach((item,i)=>{
+    const id='sql'+i;
+    const card=document.createElement('div'); card.className='card'; card.dataset.dif=item.dif;
+    card.innerHTML=`<p class="qnum">SQL ${i+1} de ${SQL40.length} · <span class="diff ${item.dif}">${difLabel[item.dif]}</span></p>
+      <p class="qtext">${item.q}</p>
+      <textarea spellcheck="false" placeholder="-- escreva sua query aqui"></textarea>
+      <div class="row">
+        <button class="btn btn-primary" data-act="fix">Corrigir</button>
+        <button class="btn btn-ghost" data-act="show">Ver gabarito</button>
+        <button class="btn btn-ghost ac-btn" data-act="auto">Autocompletar ✨</button>
+      </div>
+      <div class="fb"></div>
+      <div class="modelans"><h4>Gabarito</h4><pre class="sql">${hl(item.ans)}</pre></div>`;
+    const ta=card.querySelector('textarea'); const fb=card.querySelector('.fb');
+    function grade(){
+      const t=norm(ta.value);
+      if(t.trim().length<6){fb.className='fb show bad';fb.innerHTML='Escreva sua query antes de corrigir 🙂';return;}
+      let pass=0; const its=item.crit.map(c=>{const ok=c.f(t); if(ok)pass++; return {ok,l:c.l};});
+      const total=item.crit.length, pct=Math.round(pass/total*100);
+      fb.className='fb show '+(pct>=50?'good':'bad');
+      fb.innerHTML=`<h4>${pct>=100?'✅ Query completa!':(pct>=50?'🟡 Quase lá':'❌ Faltam partes importantes')}</h4>
+        <p class="scoreline">${pass}/${total} critérios atingidos (${pct}%)</p>
+        <ul class="crit">${its.map(x=>`<li><span class="mk ${x.ok?'pass':'fail'}">${x.ok?'✓':'✗'}</span><span>${x.l}</span></li>`).join('')}</ul>
+        <p style="margin:8px 0 0;font-size:13px;color:var(--muted)">Diferenças de apelido/maiúsculas não tiram nota. Veja o gabarito para comparar o estilo.</p>`;
+      card.querySelector('.modelans').classList.add('show');
+      if(!state.disDone.has(id)){state.disDone.add(id); updateMeter();}
+    }
+    card.querySelector('[data-act="fix"]').addEventListener('click',grade);
+    card.querySelector('[data-act="show"]').addEventListener('click',()=>{
+      card.querySelector('.modelans').classList.add('show');
+      if(!state.disDone.has(id)){state.disDone.add(id);updateMeter();}
+    });
+    card.querySelector('[data-act="auto"]').addEventListener('click',()=>{
+      ta.value=item.ans; ta.focus(); grade();
+      fb.insertAdjacentHTML('beforeend','<p style="margin:6px 0 0;font-size:12.5px;color:var(--key)">✨ Preenchido pelo autocomplete — leia com calma e tente reescrever sozinho depois.</p>');
+    });
+    root.appendChild(card);
+  });
+  // filtros de dificuldade
+  document.querySelectorAll('#sql .filt').forEach(b=>b.addEventListener('click',()=>{
+    document.querySelectorAll('#sql .filt').forEach(x=>x.setAttribute('aria-pressed','false'));
+    b.setAttribute('aria-pressed','true');
+    const d=b.dataset.dif;
+    root.querySelectorAll('.card').forEach(c=>{ c.style.display=(d==='todas'||c.dataset.dif===d)?'block':'none'; });
+  }));
+  // toggle autocomplete
+  const tg=document.getElementById('acToggle');
+  tg.addEventListener('click',()=>{
+    const on=document.body.classList.toggle('ac-on');
+    tg.classList.toggle('on',on);
+    tg.textContent = on?'✨ Autocomplete ligado (desligar)':'✨ Ativar autocomplete';
+  });
+})();
+
+/* =========================================================
+   BLOCO 3.5 — EXEMPLOS RESOLVIDOS (um de cada tipo)
+   ========================================================= */
+const EXAMPLES = [
+ {tipo:'SELECT simples', enunciado:'Listar o nome e o preço de todos os produtos.',
+  steps:['Decida as COLUNAS que quer ver → vão depois do SELECT.','Decida a TABELA → vai depois do FROM.','Sem filtro = sem WHERE.'],
+  ans:`SELECT nome_produto, preco
+FROM produtos;`,
+  tip:'SELECT * traz todas as colunas; liste os nomes quando quiser só algumas.'},
+ {tipo:'Filtro com WHERE', enunciado:'Listar os produtos da categoria \'Eletrônicos\'.',
+  steps:['Monte o SELECT … FROM normal.','Acrescente WHERE coluna = valor.','Texto vai entre aspas simples: \'Eletrônicos\'.'],
+  ans:`SELECT *
+FROM produtos
+WHERE categoria = 'Eletrônicos';`,
+  tip:'Número não leva aspas; texto e data levam aspas simples.'},
+ {tipo:'Faixa com BETWEEN', enunciado:'Produtos com preço entre 50 e 200.',
+  steps:['WHERE coluna BETWEEN menor AND maior.','BETWEEN inclui os dois limites.'],
+  ans:`SELECT nome_produto, preco
+FROM produtos
+WHERE preco BETWEEN 50 AND 200;`,
+  tip:'Equivale a preco >= 50 AND preco <= 200.'},
+ {tipo:'Texto com LIKE', enunciado:'Clientes cujo nome começa com a letra A.',
+  steps:['Use WHERE coluna LIKE padrão.','% é o coringa: \'A%\' começa com A; \'%A\' termina com A; \'%A%\' contém A.'],
+  ans:`SELECT nome
+FROM clientes
+WHERE nome LIKE 'A%';`,
+  tip:'\'A%\' = começa com A · \'%a%\' = contém a · \'%a\' = termina com a.'},
+ {tipo:'Ordenar e Top N', enunciado:'Os 3 produtos mais caros, do mais caro ao mais barato.',
+  steps:['ORDER BY coluna DESC ordena do maior pro menor (ASC = crescente).','LIMIT 3 pega só os 3 primeiros.'],
+  ans:`SELECT nome_produto, preco
+FROM produtos
+ORDER BY preco DESC
+LIMIT 3;`,
+  tip:'"Top N" = ORDER BY … DESC + LIMIT N.'},
+ {tipo:'Funções de texto', enunciado:'Mostrar o nome do produto em maiúsculas.',
+  steps:['Envolva a coluna na função: UPPER(coluna) ou LOWER(coluna).','Pode usar SUBSTRING(coluna FROM 1 FOR 10) para recortar.'],
+  ans:`SELECT UPPER(nome_produto)
+FROM produtos;`,
+  tip:'UPPER = MAIÚSCULAS · LOWER = minúsculas.'},
+ {tipo:'Função de agregação', enunciado:'Quantos produtos existem? Qual o preço médio?',
+  steps:['COUNT(*) conta linhas; AVG, SUM, MAX, MIN calculam sobre uma coluna.','Sem GROUP BY, a agregação resume a tabela inteira numa linha.'],
+  ans:`SELECT COUNT(*), AVG(preco)
+FROM produtos;`,
+  tip:'"quantos"→COUNT · "média"→AVG · "total"→SUM · "maior"→MAX · "menor"→MIN.'},
+ {tipo:'Agrupar com GROUP BY', enunciado:'Preço médio de produtos por categoria.',
+  steps:['A coluna que aparece "por …" vai no GROUP BY.','As demais colunas do SELECT precisam ser a coluna do grupo ou uma função de agregação.'],
+  ans:`SELECT categoria, AVG(preco)
+FROM produtos
+GROUP BY categoria;`,
+  tip:'"por categoria", "de cada cliente" → sinal de GROUP BY.'},
+ {tipo:'Filtrar grupos com HAVING', enunciado:'Categorias com mais de 10 produtos.',
+  steps:['Agrupe (GROUP BY) e conte (COUNT).','O filtro é sobre o RESULTADO do grupo → use HAVING, não WHERE.'],
+  ans:`SELECT categoria, COUNT(*)
+FROM produtos
+GROUP BY categoria
+HAVING COUNT(*) > 10;`,
+  tip:'WHERE filtra linhas (antes); HAVING filtra grupos (depois do GROUP BY).'},
+ {tipo:'INNER JOIN (2 tabelas)', enunciado:'Nome do cliente e a data de cada pedido.',
+  steps:['Identifique as 2 tabelas e a chave que as liga (FK = PK).','Ligue no ON: ON c.id_cliente = p.id_cliente.','Use apelidos (c, p) para encurtar.'],
+  ans:`SELECT c.nome, p.data_pedido
+FROM pedidos p
+INNER JOIN clientes c ON c.id_cliente = p.id_cliente;`,
+  tip:'A ligação SEMPRE vai no ON, comparando chave com chave.'},
+ {tipo:'JOIN de 3 tabelas', enunciado:'Nome do motorista de quem reservou o carro \'Verde\'.',
+  steps:['Comece pela tabela do meio (RESERVAS, que tem as 2 FKs).','Ligue MOTORISTA por IDMOTO e CARRO por IDCARRO.','O filtro (cor = verde) vai no WHERE.'],
+  ans:`SELECT M.NOME
+FROM MOTORISTA M
+INNER JOIN RESERVAS R ON M.IDMOTO = R.IDMOTO
+INNER JOIN CARRO C ON C.IDCARRO = R.IDCARRO
+WHERE C.COR = 'Verde';`,
+  tip:'Tabela do meio liga as pontas. Um JOIN…ON para cada ligação.'},
+ {tipo:'LEFT JOIN + IS NULL', enunciado:'Clientes que nunca fizeram nenhum pedido.',
+  steps:['LEFT JOIN traz TODOS os clientes, mesmo sem pedido.','Quem não tem pedido fica com NULL no lado dos pedidos.','Filtre esse vazio com WHERE p.id_pedido IS NULL.'],
+  ans:`SELECT c.nome
+FROM clientes c
+LEFT JOIN pedidos p ON p.id_cliente = c.id_cliente
+WHERE p.id_pedido IS NULL;`,
+  tip:'"quem NÃO tem / nunca fez" → LEFT JOIN … WHERE … IS NULL.'},
+ {tipo:'Subconsulta (MAX / média)', enunciado:'Produtos com preço acima da média de todos.',
+  steps:['Calcule o valor de referência numa subconsulta: (SELECT AVG(preco) FROM produtos).','Compare na consulta de fora: WHERE preco > (subconsulta).'],
+  ans:`SELECT nome_produto, preco
+FROM produtos
+WHERE preco > (SELECT AVG(preco) FROM produtos);`,
+  tip:'"o maior / a maior nota" → subconsulta com MAX. "acima da média" → AVG.'},
+ {tipo:'DML: INSERT / UPDATE / DELETE', enunciado:'Inserir um cliente; aumentar preços; apagar pedidos cancelados.',
+  steps:['INSERT INTO tabela (colunas) VALUES (valores).','UPDATE tabela SET coluna = … WHERE condição.','DELETE FROM tabela WHERE condição. NUNCA esqueça o WHERE no UPDATE/DELETE!'],
+  ans:`INSERT INTO clientes (nome, cidade) VALUES ('Ana Lima', 'Vitória');
+
+UPDATE produtos SET preco = preco * 1.10 WHERE categoria = 'Eletrônicos';
+
+DELETE FROM pedidos WHERE status = 'cancelado';`,
+  tip:'Sem WHERE, o UPDATE/DELETE afeta a tabela INTEIRA.'},
+ {tipo:'DDL: CREATE TABLE', enunciado:'Criar a tabela pedidos com PK, FK, NOT NULL e DEFAULT.',
+  steps:['Liste coluna + tipo, uma por linha.','Restrições nomeadas: CONSTRAINT nome PRIMARY KEY / FOREIGN KEY … REFERENCES.','DEFAULT define valor padrão; NOT NULL impede vazio.'],
+  ans:`CREATE TABLE pedidos (
+  id_pedido   INTEGER NOT NULL,
+  id_cliente  INTEGER NOT NULL,
+  data_pedido DATE NOT NULL,
+  status      VARCHAR(20) DEFAULT 'aberto',
+  CONSTRAINT pk_pedidos PRIMARY KEY (id_pedido),
+  CONSTRAINT fk_pedidos_cliente FOREIGN KEY (id_cliente)
+      REFERENCES clientes(id_cliente)
+);`,
+  tip:'O professor gosta de constraints nomeadas e tabelas no plural.'}
+];
+
+(function renderEx(){
+  const root=document.getElementById('exList');
+  EXAMPLES.forEach((ex,i)=>{
+    const card=document.createElement('div'); card.className='card';
+    card.innerHTML=`<p class="qnum">Exemplo ${i+1} de ${EXAMPLES.length} · <b style="color:#7a5cd0">${ex.tipo}</b></p>
+      <p class="qtext">${ex.enunciado}</p>
+      <b style="font-size:13px">Como pensar:</b>
+      <ol class="steps">${ex.steps.map(s=>`<li>${s}</li>`).join('')}</ol>
+      <pre class="sql">${hl(ex.ans)}</pre>
+      ${ex.tip?`<p class="tip">💡 ${ex.tip}</p>`:''}`;
+    root.appendChild(card);
+  });
+})();
+
+/* =========================================================
+   BLOCO 4 — MODELAGEM INTERATIVA
+   ========================================================= */
+const TYPES = ['— escolha —','Comum','PK','FK','FK + parte da PK'];
+const MOD = [
+ {
+  title:'Relacionamento 1:N — Departamento e Empregado',
+  prompt:'Um DEPARTAMENTO tem vários EMPREGADOS; cada empregado pertence a um único departamento (1:N). Marque o tipo de cada coluna no modelo lógico. <b>Lembre:</b> no 1:N, a PK do lado "1" vira FK no lado "N".',
+  tables:[
+   {name:'DEPARTAMENTO', cols:[['cod_dep','PK'],['nome_dep','Comum']]},
+   {name:'EMPREGADO', cols:[['matricula','PK'],['nome','Comum'],['cod_dep','FK']]}
+  ],
+  yn:null,
+  hint:'O empregado é o lado "N", então é ele que recebe a chave do departamento como FK (cod_dep). O departamento não ganha coluna nenhuma do empregado.'
+ },
+ {
+  title:'Auto-relacionamento 1:N — Supervisão (caiu hoje!)',
+  prompt:'Um EMPREGADO supervisiona vários empregados e é supervisionado por no máximo um. Esse auto-relacionamento 1:N vira uma <b>FK na própria tabela</b>. Marque os tipos. <b>Cuidado:</b> a coluna do supervisor é só FK — <u>não</u> é PK.',
+  tables:[
+   {name:'EMPREGADO', cols:[['id_empregado','PK'],['nome','Comum'],['id_empregado_supervisor','FK']]}
+  ],
+  yn:null,
+  hint:'A única PK é id_empregado. O id_empregado_supervisor é apenas FK (aponta para EMPREGADO.id_empregado) e aceita NULL no chefe maior. Esse foi o erro marcado na prova: ter posto o supervisor como PK.'
+ },
+ {
+  title:'Relacionamento N:N — Aluno e Disciplina (com nota)',
+  prompt:'Um ALUNO cursa várias DISCIPLINAS e vice-versa (N:N), e o relacionamento guarda a <code>nota</code>. Primeiro decida se é preciso criar uma tabela associativa; depois marque os tipos. A associativa CURSA já está montada abaixo.',
+  tables:[
+   {name:'ALUNO', cols:[['ra','PK'],['nome','Comum']]},
+   {name:'DISCIPLINA', cols:[['cod','PK'],['titulo','Comum']]},
+   {name:'CURSA (associativa)', cols:[['ra','FK + parte da PK'],['cod','FK + parte da PK'],['nota','Comum']]}
+  ],
+  yn:{q:'Um relacionamento N:N exige criar uma tabela associativa nova?', correct:'sim'},
+  hint:'N:N sempre vira tabela nova (CURSA). Suas duas colunas-chave (ra e cod) são FKs que, juntas, formam a PK da associativa. O atributo do relacionamento (nota) entra nessa tabela.'
+ }
+];
+
+(function renderMod(){
+  const root = document.getElementById('modList');
+  MOD.forEach((m,i)=>{
+    const id='mod'+i;
+    const card = document.createElement('div'); card.className='card'; card.style.borderLeftColor='var(--ok)';
+    let ynHtml='';
+    if(m.yn){
+      ynHtml = `<div class="yn" data-yn>
+        <label><input type="radio" name="yn${i}" value="sim"> Sim</label>
+        <label><input type="radio" name="yn${i}" value="nao"> Não</label>
+      </div><p style="font-size:13px;color:var(--muted);margin:0 0 4px">${m.yn.q}</p>`;
+    }
+    let tablesHtml = m.tables.map((tb,ti)=>`
+      <div class="build" data-tbl="${ti}">
+        <div class="tname">▦ ${tb.name}</div>
+        <table><thead><tr><th>Coluna</th><th>Tipo (escolha)</th><th>Resultado</th></tr></thead>
+        <tbody>${tb.cols.map((c,ci)=>`
+          <tr data-row="${ci}">
+            <td>${c[0]}</td>
+            <td><select data-sel>${TYPES.map(t=>`<option>${t}</option>`).join('')}</select></td>
+            <td class="res"></td>
+          </tr>`).join('')}</tbody></table>
+      </div>`).join('');
+    card.innerHTML = `<p class="qnum">Modelagem ${i+1} de ${MOD.length}</p>
+      <p class="qtext">${m.title}</p>
+      <p style="font-size:14px;margin:0 0 12px">${m.prompt}</p>
+      ${ynHtml}
+      ${tablesHtml}
+      <div class="row">
+        <button class="btn btn-primary" data-act="check">Verificar</button>
+      </div>
+      <div class="fb"></div>
+      <details class="hint"><summary>Mostrar explicação</summary><p>${m.hint}</p></details>`;
+    card.querySelector('[data-act="check"]').addEventListener('click',()=>checkMod(i,card,id));
+    root.appendChild(card);
+  });
+})();
+
+function checkMod(i,card,id){
+  const m = MOD[i];
+  let total=0, right=0, blank=false;
+  m.tables.forEach((tb,ti)=>{
+    const rows = card.querySelectorAll(`[data-tbl="${ti}"] tr[data-row]`);
+    rows.forEach((tr,ci)=>{
+      const sel = tr.querySelector('[data-sel]');
+      const res = tr.querySelector('.res');
+      const expected = tb.cols[ci][1];
+      const chosen = sel.value;
+      total++;
+      tr.querySelector('td:first-child').classList.remove('cell-ok','cell-bad');
+      if(chosen==='— escolha —'){ blank=true; res.textContent='—'; res.style.color='var(--muted)'; sel.style.borderColor='var(--line)'; return; }
+      if(chosen===expected){ right++; res.textContent='✓ certo'; res.style.color='var(--ok)'; sel.style.borderColor='var(--ok)'; }
+      else { res.innerHTML='✗ é <b>'+expected+'</b>'; res.style.color='var(--bad)'; sel.style.borderColor='var(--bad)'; }
+    });
+  });
+  // yes/no
+  let ynOk=true;
+  if(m.yn){
+    const picked = card.querySelector('[data-yn] input:checked');
+    total++;
+    if(!picked){ blank=true; ynOk=false; }
+    else if(picked.value===m.yn.correct){ right++; }
+    else { ynOk=false; }
+  }
+  const fb = card.querySelector('.fb');
+  const pct = Math.round(right/total*100);
+  if(blank){
+    fb.className='fb show bad';
+    fb.innerHTML = `<h4>Faltou marcar algo</h4><p>Escolha o tipo de todas as colunas${m.yn?' e responda Sim/Não':''} antes de verificar. (Por enquanto: ${right}/${total})</p>`;
+    return;
+  }
+  fb.className='fb show '+(pct>=100?'good':(pct>=60?'good':'bad'));
+  fb.innerHTML = `<h4>${pct>=100?'✅ Modelo lógico correto!':(pct>=60?'🟡 Quase — ajuste o vermelho':'❌ Reveja as regras de derivação')}</h4>
+    <p class="scoreline">${right}/${total} acertos (${pct}%)</p>
+    ${pct<100?'<p style="font-size:13px;color:var(--muted);margin:6px 0 0">As células vermelhas mostram o tipo certo. Abra a explicação abaixo se precisar.</p>':''}`;
+  if(pct>=100 && !state.modDone.has(id)){ state.modDone.add(id); updateMeter(); }
+  else if(pct>=100){ /* already counted */ }
+}
+
+/* =========================================================
+   BLOCO 5 — AVANÇADO (Aulas 11–13)
+   ========================================================= */
+const AVOBJ = [
+ {q:'Se a tabela T1 tem N linhas e T2 tem M linhas, o CROSS JOIN (junção cruzada) entre elas produz quantas linhas?',
+  o:['N + M linhas','N × M linhas (produto cartesiano)','O maior entre N e M','Apenas as linhas com correspondência'],a:1,
+  e:'O <b>CROSS JOIN</b> combina cada linha de T1 com cada linha de T2 → <b>N × M</b> linhas. Equivale a <code style="font-family:var(--font-mono)">FROM T1, T2</code> sem cláusula WHERE.'},
+ {q:'O que o NATURAL JOIN faz?',
+  o:['Junta as tabelas automaticamente pelas colunas de mesmo nome e tipo, sem ON','Retorna sempre todas as linhas das duas tabelas','Exige escrever a condição ON manualmente','Faz o produto cartesiano'],a:0,
+  e:'O <b>NATURAL JOIN</b> identifica sozinho as colunas de <b>mesmo nome e tipo</b> e retorna apenas as linhas com valores correspondentes — você não escreve o ON.'},
+ {q:'O LEFT OUTER JOIN garante que o resultado terá, no mínimo:',
+  o:['Uma linha para cada linha da tabela da DIREITA (T2)','Uma linha para cada linha da tabela da ESQUERDA (T1)','Nenhuma linha sem correspondência','O mesmo número de linhas das duas tabelas'],a:1,
+  e:'No <b>LEFT OUTER JOIN</b>, faz-se a junção interna e depois cada linha de T1 sem par recebe NULL nas colunas de T2. Logo há <b>no mínimo uma linha para cada linha de T1</b> (a tabela da esquerda).'},
+ {q:'O FULL OUTER JOIN retorna:',
+  o:['Só as linhas com correspondência','Todas as linhas de ambas as tabelas (com NULL onde não há par)','Apenas a tabela da esquerda','O produto cartesiano'],a:1,
+  e:'<b>FULL OUTER JOIN</b> = junção interna + sobras da esquerda + sobras da direita → <b>todos os registros das duas tabelas</b>.'},
+ {q:'No operador "expressão IN (subconsulta)", o resultado é verdadeiro quando:',
+  o:['A subconsulta não retorna nenhuma linha','É encontrada uma linha igual na subconsulta','A expressão é nula','A subconsulta retorna mais de uma coluna'],a:1,
+  e:'O <b>IN</b> é verdadeiro se houver <b>uma linha igual</b> na subconsulta; é falso se nenhuma for encontrada (inclusive quando a subconsulta volta vazia).'},
+ {q:'Para que serve uma VIEW (visão)?',
+  o:['Armazenar fisicamente uma cópia dos dados','Exibir/filtrar dados de consultas complexas e restringir linhas/colunas que um usuário acessa','Criar índices automaticamente','Fazer backup do banco'],a:1,
+  e:'A <b>VIEW</b> é uma consulta salva: economiza digitação, simplifica consultas complexas e permite mostrar só as linhas/colunas desejadas a cada usuário. Ela não duplica os dados.'},
+ {q:'O comando para apagar uma view é:',
+  o:['DELETE VIEW','DROP VIEW','REMOVE VIEW','TRUNCATE VIEW'],a:1,
+  e:'Usa-se <code style="font-family:var(--font-mono)">DROP VIEW nome_da_view;</code> (ex.: DROP VIEW v_rochas).'},
+ {q:'Em uma transação, se ocorrer um erro no meio das operações, o esperado é que:',
+  o:['Apenas a última operação seja desfeita','Todas as operações sejam desfeitas (ROLLBACK) — princípio "tudo ou nada"','As operações sejam confirmadas mesmo assim','O banco seja reiniciado'],a:1,
+  e:'Transação agrupa comandos num bloco lógico: <b>tudo ou nada</b>. <code style="font-family:var(--font-mono)">COMMIT</code> confirma; havendo erro, <code style="font-family:var(--font-mono)">ROLLBACK</code> desfaz tudo.'},
+ {q:'Qual a principal diferença entre uma Stored Procedure/Function e uma Trigger?',
+  o:['A trigger é mais rápida','A procedure é chamada explicitamente (ex.: SELECT proc()); a trigger dispara automaticamente quando ocorre um evento','Não há diferença','A trigger não pode acessar tabelas'],a:1,
+  e:'Ambas são procedimentos armazenados. A diferença: a <b>trigger (gatilho)</b> é executada <b>automaticamente</b> quando ocorre um evento; a procedure/function você <b>chama</b> diretamente.'},
+ {q:'Uma trigger definida como BEFORE pode:',
+  o:['Apenas registrar o que já aconteceu','Evitar a operação ou modificar a tupla que está sendo inserida/atualizada, antes de efetivar','Somente disparar após o COMMIT','Apagar a tabela'],a:1,
+  e:'Disparando <b>BEFORE</b> (antes de verificar restrições e efetivar), o gatilho pode <b>cancelar a operação ou alterar a tupla</b> (em INSERT/UPDATE). No <b>AFTER</b>, as mudanças já estão feitas e visíveis.'},
+ {q:'Quais eventos podem disparar uma trigger?',
+  o:['Apenas SELECT','INSERT, UPDATE e/ou DELETE','Apenas CREATE TABLE','GRANT e REVOKE'],a:1,
+  e:'Gatilhos são associados aos eventos de modificação de dados: <b>INSERT, UPDATE e DELETE</b>.'},
+ {q:'Polimorfismo (sobrecarga de função) no PostgreSQL significa que:',
+  o:['Uma função só pode ter um único parâmetro','Pode haver funções com o mesmo nome, mas assinaturas (nome + parâmetros) diferentes','Funções não podem ser apagadas','Toda função retorna o mesmo tipo'],a:1,
+  e:'A <b>assinatura</b> = nome + parâmetros. Por isso pode existir o mesmo nome com parâmetros diferentes, e o <code style="font-family:var(--font-mono)">DROP FUNCTION</code> precisa da assinatura, não só do nome.'},
+ {q:'Para que serve um CURSOR?',
+  o:['Ordenar o resultado','Ler o resultado da consulta em partes (algumas linhas por vez), evitando estouro de memória','Criar uma chave primária','Acelerar o JOIN'],a:1,
+  e:'O <b>cursor</b> encapsula a consulta e lê o resultado <b>aos poucos</b>, útil quando o resultado tem muitas linhas e há risco de estourar a memória.'},
+ {q:'Em PL/pgSQL, a seção DECLARE serve para:',
+  o:['Declarar variáveis','Confirmar a transação','Criar a tabela','Definir permissões'],a:0,
+  e:'O bloco <b>DECLARE</b> é a área de <b>declaração de variáveis</b> da função; elas recebem o valor padrão ao entrar no bloco.'},
+ {q:'Para usar SQL embutida em um programa Java acessando o PostgreSQL, importam-se classes como:',
+  o:['Scanner, ArrayList e File','Connection, Statement e DriverManager (do pacote java.sql)','Thread e Runnable','Math e Random'],a:1,
+  e:'Acesso via JDBC usa <code style="font-family:var(--font-mono)">java.sql.Connection</code>, <code style="font-family:var(--font-mono)">Statement</code> e <code style="font-family:var(--font-mono)">DriverManager</code>.'},
+ {q:'No acesso ao PostgreSQL via ODBC, qual driver deve estar disponível?',
+  o:['mysqlODBC','psqlODBC','oracleODBC','sqliteODBC'],a:1,
+  e:'O acesso via ODBC ao PostgreSQL usa o driver <b>psqlODBC</b>, configurado em Fontes de Dados (ODBC).'}
+];
+const AVTEO = [
+ {q:'Explique os tipos de junção (CROSS, INNER, LEFT, RIGHT, FULL OUTER e NATURAL) e o que cada um retorna.',
+  ans:'CROSS JOIN: produto cartesiano — cada linha de T1 com cada linha de T2 (N×M); equivale a FROM T1, T2 sem WHERE. INNER JOIN: só as linhas que satisfazem a condição de junção nas duas tabelas. LEFT OUTER JOIN: junção interna + todas as linhas de T1 sem par (NULL nas colunas de T2). RIGHT OUTER JOIN: o oposto — todas as linhas de T2 sem par (NULL nas colunas de T1). FULL OUTER JOIN: junção interna + as sobras dos dois lados (todas as linhas das duas tabelas). NATURAL JOIN: junta automaticamente pelas colunas de mesmo nome e tipo, retornando só as linhas correspondentes (sem escrever o ON).',
+  pts:['CROSS = produto cartesiano (N×M)','INNER = só correspondências','LEFT = T1 inteira + correspondências','RIGHT = T2 inteira + correspondências','FULL OUTER = todas as linhas das duas','NATURAL = automático por colunas de mesmo nome']},
+ {q:'O que é uma VIEW? Para que serve e como se apaga?',
+  ans:'A VIEW (visão) é uma consulta SQL salva com um nome, que se comporta como uma "tabela virtual". Serve para simplificar e reaproveitar consultas complexas (economiza digitação), e para controlar acesso, mostrando a um usuário apenas as linhas e/ou colunas desejadas. Ela não armazena dados próprios — exibe os dados das tabelas-base. Apaga-se com DROP VIEW nome_da_view;.',
+  pts:['Definiu VIEW como consulta salva / tabela virtual','Citou utilidade: simplificar consultas complexas','Citou utilidade: restringir linhas/colunas a um usuário','Mencionou DROP VIEW para apagar']},
+ {q:'Explique o conceito de transação no banco de dados (BEGIN, COMMIT, ROLLBACK) e a ideia de "tudo ou nada".',
+  ans:'Uma transação agrupa vários comandos em um único comando lógico. Inicia-se com BEGIN TRANSACTION; se tudo der certo, o COMMIT confirma e torna as alterações permanentes; se houver algum erro, o ROLLBACK desfaz todas as operações do bloco. É o princípio "tudo ou nada": ou todas as operações têm efeito, ou nenhuma tem.',
+  pts:['Transação agrupa comandos num bloco lógico','BEGIN inicia / COMMIT confirma','ROLLBACK desfaz tudo em caso de erro','Explicou o "tudo ou nada"']},
+ {q:'Diferencie uma Stored Procedure (ou Function) de uma Trigger.',
+  ans:'Ambas são procedimentos armazenados no banco. A diferença está em como são executadas: a Stored Procedure/Function é chamada explicitamente pelo usuário ou aplicação (ex.: SELECT minha_funcao()). A Trigger (gatilho) também é um procedimento armazenado, mas é executada automaticamente quando ocorre um evento (INSERT, UPDATE ou DELETE) na tabela — ao ocorrer o evento, o gatilho dispara e o procedimento roda.',
+  pts:['Ambas são procedimentos armazenados','Procedure/function é chamada explicitamente','Trigger dispara automaticamente em um evento','Citou os eventos INSERT/UPDATE/DELETE']},
+ {q:'O que é uma Trigger? Explique a diferença entre BEFORE e AFTER.',
+  ans:'Trigger (gatilho) é um procedimento armazenado executado automaticamente quando ocorre um evento (INSERT, UPDATE ou DELETE) numa tabela. Pode ser BEFORE — dispara antes da operação ser efetivada (antes de checar restrições), podendo cancelar a operação ou modificar a tupla que está sendo inserida/atualizada. Ou AFTER — dispara depois da operação concluída (restrições já verificadas e a alteração feita), quando todas as modificações já estão visíveis ao gatilho. Um uso clássico é montar um log de auditoria das alterações.',
+  pts:['Definiu trigger (executa em um evento, automaticamente)','BEFORE: antes de efetivar; pode cancelar/alterar a tupla','AFTER: depois de concluir; alterações já visíveis','Citou um exemplo de uso (ex.: log/auditoria)']},
+ {q:'O que é um Cursor e quando usá-lo? Qual o papel da seção DECLARE em PL/pgSQL?',
+  ans:'Um cursor encapsula uma consulta e permite ler o resultado algumas linhas de cada vez, em vez de trazer tudo de uma só vez. É útil quando o resultado tem um número muito grande de linhas, evitando erro de estouro de memória. Já a seção DECLARE, em PL/pgSQL, é a área onde se declaram as variáveis usadas na função; elas são inicializadas com seus valores padrão a cada entrada no bloco.',
+  pts:['Cursor lê o resultado em partes (algumas linhas por vez)','Motivo: evitar estouro de memória com muitas linhas','DECLARE é a área de declaração de variáveis']}
+];
+
+(function renderAvObj(){
+  const root=document.getElementById('avObjList');
+  AVOBJ.forEach((item,i)=>{
+    const card=document.createElement('div'); card.className='card'; card.style.borderLeftColor='#7a5cd0';
+    card.innerHTML=`<p class="qnum">Avançada ${i+1} de ${AVOBJ.length}</p>
+      <p class="qtext">${item.q}</p><div class="opts"></div><div class="exp"></div>`;
+    const opts=card.querySelector('.opts'); const L=['a','b','c','d','e'];
+    item.o.forEach((opt,j)=>{
+      const lab=document.createElement('label'); lab.className='opt';
+      lab.innerHTML=`<input type="radio" name="avobj${i}"><span class="lbl">${L[j]})</span><span>${opt}</span>`;
+      lab.querySelector('input').addEventListener('change',()=>answerAvObj(i,j,card));
+      opts.appendChild(lab);
+    });
+    root.appendChild(card);
+  });
+})();
+function answerAvObj(qi,choice,card){
+  if(state.avObjDone.has(qi))return; state.avObjDone.add(qi);
+  const labels=card.querySelectorAll('.opt'); const correct=AVOBJ[qi].a;
+  labels.forEach((l,idx)=>{ l.classList.add('disabled'); l.querySelector('input').disabled=true;
+    if(idx===correct)l.classList.add('correct'); if(idx===choice&&choice!==correct)l.classList.add('wrong'); });
+  if(choice===correct)state.avObjRight++;
+  const exp=card.querySelector('.exp');
+  exp.innerHTML=(choice===correct?'✅ <b>Correto.</b> ':'❌ <b>Resposta certa: '+['a','b','c','d','e'][correct]+')</b> ')+AVOBJ[qi].e;
+  exp.classList.add('show'); updateMeter();
+}
+
+(function renderAvTeo(){
+  const root=document.getElementById('avTeoList');
+  AVTEO.forEach((item,i)=>{
+    const id='avteo'+i;
+    const card=document.createElement('div'); card.className='card'; card.style.borderLeftColor='#7a5cd0';
+    card.innerHTML=`<p class="qnum">Conceitual ${i+1} de ${AVTEO.length}</p>
+      <p class="qtext">${item.q}</p>
+      <textarea class="theory" placeholder="Escreva sua resposta antes de ver o gabarito…"></textarea>
+      <div class="row"><button class="btn btn-primary" data-act="gab">Ver gabarito e me autoavaliar</button></div>
+      <div class="modelans"><h4>Resposta-modelo</h4><p>${item.ans}</p>
+        <div class="selfcheck"><b style="font-size:13px">Marque o que você cobriu:</b></div>
+        <p class="scoreline" style="margin-top:10px"></p></div>`;
+    const sc=card.querySelector('.selfcheck');
+    item.pts.forEach(p=>{ const lab=document.createElement('label');
+      lab.innerHTML=`<input type="checkbox"><span>${p}</span>`;
+      lab.querySelector('input').addEventListener('change',()=>scoreAvTeo(i,card)); sc.appendChild(lab); });
+    card.querySelector('[data-act="gab"]').addEventListener('click',()=>{
+      card.querySelector('.modelans').classList.add('show');
+      if(!state.avTeoDone.has(id)){ state.avTeoDone.add(id); updateMeter(); } scoreAvTeo(i,card); });
+    root.appendChild(card);
+  });
+})();
+function scoreAvTeo(i,card){
+  const boxes=card.querySelectorAll('.selfcheck input'); let got=0; boxes.forEach(b=>{if(b.checked)got++;});
+  const total=boxes.length; const line=card.querySelector('.scoreline'); const pct=Math.round(got/total*100);
+  line.textContent=`Sua autoavaliação: ${got}/${total} pontos-chave (${pct}%).`+(pct>=70?'  ✅ bom domínio':'  ⚠️ revise o que faltou');
+  line.style.color=pct>=70?'var(--ok)':'var(--key)';
+}
+
+/* =========================================================
+   RESET
+   ========================================================= */
+document.getElementById('resetBtn').addEventListener('click',()=>{
+  if(confirm('Reiniciar todo o progresso e limpar as respostas?')) location.reload();
+});
+
+updateMeter();
+</script>
+</body>
+</html>
